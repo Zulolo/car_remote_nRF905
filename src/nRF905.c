@@ -8,8 +8,6 @@
 #include "wiringPi.h"
 #include "wiringPiSPI.h"
 
-#include <syslog.h>
-
 #define NRF905_TX_EN_PIN				17
 #define NRF905_TRX_CE_PIN				18
 #define NRF905_PWR_UP_PIN				27
@@ -17,14 +15,6 @@
 #define NRF905_CD_PIN					22
 #define NRF905_AM_PIN					23
 #define NRF905_DR_PIN					24
-
-#define NRF905D_LOG_ERR(arg...)			openlog("nRF905.D.err", LOG_PID, 0);\
-										syslog(LOG_USER | LOG_INFO, arg);\
-										closelog()
-
-#define NRF905D_LOG_INFO(arg...)		openlog("nRF905.D.info", LOG_PID, 0);\
-										syslog(LOG_USER | LOG_INFO, arg);\
-										closelog()
 
 #define US_PER_SECONDE					1000000
 #define NRF905_TX_ADDR_LEN				4
@@ -116,9 +106,6 @@ static uint8_t NRF905_CR_DEFAULT[] = { 0x4C, 0x0C, // F=(422.4+(0x6C<<1)/10)*1; 
 		0x00, 0x0C, 0x40, 0x08,	// RX address is the calculation result of CH_NO
 		0x58 };	// 16MHz crystal; enable CRC; CRC16
 
-static const uint16_t unRF_HOPPING_TABLE[] = { 0x884C, 0x883A, 0x8846, 0x8832, 0x884A, 0x8835, 0x884B, 0x8837, 0x884F, 0x883E, 0x8847,
-		0x8838, 0x8844, 0x8834, 0x8843, 0x8834, 0x884B, 0x8839, 0x884D, 0x883A, 0x884E, 0x883C, 0x8832, 0x883F };
-
 enum _nRF905PinPosInModeLevel {
 	NRF905_PWR_UP_PIN_POS = 0, NRF905_TRX_CE_PIN_POS, NRF905_TX_EN_PIN_POS, NRF905_TX_POS_MAX
 };
@@ -150,4 +137,6 @@ int nRF905Initial(int nSPI_Channel, int nSPI_Speed) {
 	int nRF905SPI_Fd = wiringPiSPISetup(nSPI_Channel, nSPI_Speed);
 	nRF905SPI_CHN = nSPI_Channel;
 	nRF905CRInitial(nRF905SPI_Fd);
+
+	return 0;
 }
