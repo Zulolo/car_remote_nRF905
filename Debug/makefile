@@ -8,6 +8,7 @@ RM := rm -rf
 
 # All of the sources participating in the build are defined here
 -include sources.mk
+-include src/lib/subdir.mk
 -include src/subdir.mk
 -include subdir.mk
 -include objects.mk
@@ -29,7 +30,7 @@ all: car_remote_nRF905
 car_remote_nRF905: $(OBJS) $(USER_OBJS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: Cross GCC Linker'
-	arm-linux-gnueabi-gcc -L/home/zulolo/eclipse-workspace/libs/wiringPi -o "car_remote_nRF905" $(OBJS) $(USER_OBJS) $(LIBS)
+	arm-linux-gnueabihf-gcc -L/home/zulolo/eclipse-workspace/libs/wiringPi -L"/home/zulolo/eclipse-workspace/car_remote_nRF905/lib_3rd" -o "car_remote_nRF905" $(OBJS) $(USER_OBJS) $(LIBS)
 	@echo 'Finished building target: $@'
 	@echo ' '
 	$(MAKE) --no-print-directory post-build

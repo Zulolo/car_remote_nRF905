@@ -3,11 +3,11 @@
 
 #include <syslog.h>
 
-#define NRF905D_LOG_ERR(arg...)			openlog("nRF905.D.err", LOG_PID, 0);\
+#define NRF905D_LOG_ERR(arg...)			openlog("nRF905.err", LOG_PID, 0);\
 										syslog(LOG_USER | LOG_INFO, arg);\
 										closelog()
 
-#define NRF905D_LOG_INFO(arg...)		openlog("nRF905.D.info", LOG_PID, 0);\
+#define NRF905D_LOG_INFO(arg...)		openlog("nRF905.info", LOG_PID, 0);\
 										syslog(LOG_USER | LOG_INFO, arg);\
 										closelog()
 

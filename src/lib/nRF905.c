@@ -5,8 +5,10 @@
  *      Author: zulolo
  *      Description: Use wiringPi ISR and SPI feature to control nRF905
  */
+#include <stdint.h>
 #include "wiringPi.h"
 #include "wiringPiSPI.h"
+#include "system.h"
 
 #define NRF905_TX_EN_PIN				17
 #define NRF905_TRX_CE_PIN				18
@@ -110,17 +112,13 @@ enum _nRF905PinPosInModeLevel {
 	NRF905_PWR_UP_PIN_POS = 0, NRF905_TRX_CE_PIN_POS, NRF905_TX_EN_PIN_POS, NRF905_TX_POS_MAX
 };
 
-static const uint8_t unNRF905MODE_PIN_LEVEL[][NRF905_TX_POS_MAX] = {
-		{ GPIO_LEVEL_LOW, GPIO_LEVEL_LOW, GPIO_LEVEL_LOW },
-		{ GPIO_LEVEL_HIGH, GPIO_LEVEL_LOW, GPIO_LEVEL_LOW },
-		{ GPIO_LEVEL_HIGH, GPIO_LEVEL_LOW, GPIO_LEVEL_LOW },
-		{ GPIO_LEVEL_HIGH, GPIO_LEVEL_HIGH, GPIO_LEVEL_LOW },
-		{ GPIO_LEVEL_HIGH, GPIO_LEVEL_HIGH, GPIO_LEVEL_HIGH } };
+//static const uint8_t unNRF905MODE_PIN_LEVEL[][NRF905_TX_POS_MAX] = {
+//		{ GPIO_LEVEL_LOW, GPIO_LEVEL_LOW, GPIO_LEVEL_LOW },
+//		{ GPIO_LEVEL_HIGH, GPIO_LEVEL_LOW, GPIO_LEVEL_LOW },
+//		{ GPIO_LEVEL_HIGH, GPIO_LEVEL_LOW, GPIO_LEVEL_LOW },
+//		{ GPIO_LEVEL_HIGH, GPIO_LEVEL_HIGH, GPIO_LEVEL_LOW },
+//		{ GPIO_LEVEL_HIGH, GPIO_LEVEL_HIGH, GPIO_LEVEL_HIGH } };
 
-static uint8_t unSPI_Mode = SPI_MODE_0;
-static uint8_t unSPI_Bits = 8;
-static uint32_t unSPI_Speed = 5000000;
-static uint16_t unSPI_Delay = 0;
 uint8_t unNeedtoClose = NRF905_FALSE;
 
 static int nRF905SPI_CHN = 0;
@@ -131,6 +129,7 @@ static int nRF905SPI_DataWR(unsigned char *pData, int nDataLen) {
 
 static int nRF905CRInitial(int nRF905SPI_Fd) {
 
+	return 0;
 }
 
 int nRF905Initial(int nSPI_Channel, int nSPI_Speed) {
