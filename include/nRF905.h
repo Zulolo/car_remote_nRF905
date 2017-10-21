@@ -13,5 +13,7 @@
 
 
 int nRF905Initial(int nSPI_Channel, int nSPI_Speed);
+int nRF905StartListen(unsigned short int pHoppingTable);
+int nRF905ReadFrame(unsigned char* pReadBuff, int nBuffLen);
 
 #endif

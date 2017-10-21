@@ -27,7 +27,7 @@ static const uint16_t unCAR_REMOTE_HOPPING_TAB[] = { 0x884C, 0x883A, 0x8846, 0x8
 PI_THREAD (nRF905Thread)
 {
 	(void)piHiPri(10);
-	nRF905StartReceive(NRF905_SPI_CHN, NRF905_SPEED, unCAR_REMOTE_HOPPING_TAB);
+	nRemoteCarStartReceive(NRF905_SPI_CHN, NRF905_SPEED, unCAR_REMOTE_HOPPING_TAB);
 }
 
 int main(void) {

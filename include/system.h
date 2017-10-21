@@ -12,5 +12,7 @@
 										closelog()
 
 int nSetSystemValue(char* pKey, char* pValue);
+int32_t nClearSystemValue(char* pKey);
+int32_t nIncrSystemValue(char* pKey);
 
 #endif

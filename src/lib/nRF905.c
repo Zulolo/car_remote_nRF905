@@ -59,9 +59,9 @@ typedef struct _CommTask {
  */
 #define NRF905_RX_ADDRESS_IN_CR					5
 #define NRF905_CMD_WC_MASK						0x0F
-#define NRF905_CMD_WC(unWR_CFG_ByteIndex)		((unWR_CFG_ByteIndex) & NRF905_CMD_WC_MASK)
+#define NRF905_CMD_WC(unWR_CFG_ByteIndex)		((unWR_CFG_ByteIndex) & NRF905_CMD_WC_MASK)	// Write Configuration register
 #define NRF905_CMD_RC_MASK						0x0F
-#define NRF905_CMD_RC(unRD_CFG_ByteIndex)		(((unRD_CFG_ByteIndex) & NRF905_CMD_RC_MASK) | 0x10)
+#define NRF905_CMD_RC(unRD_CFG_ByteIndex)		(((unRD_CFG_ByteIndex) & NRF905_CMD_RC_MASK) | 0x10)	// Read Configuration register
 #define NRF905_CMD_WTP							0x20
 #define NRF905_CMD_RTP							0x21
 #define NRF905_CMD_WTA							0x22
@@ -123,7 +123,7 @@ uint8_t unNeedtoClose = NRF905_FALSE;
 
 static int nRF905SPI_CHN = 0;
 
-static int nRF905SPI_DataWR(unsigned char *pData, int nDataLen) {
+static int nRF905SPI_WR(unsigned char *pData, int nDataLen) {
 	return wiringPiSPIDataRW(nRF905SPI_CHN, pData, nDataLen);
 }
 
@@ -134,8 +134,28 @@ static int nRF905CRInitial(int nRF905SPI_Fd) {
 
 int nRF905Initial(int nSPI_Channel, int nSPI_Speed) {
 	int nRF905SPI_Fd = wiringPiSPISetup(nSPI_Channel, nSPI_Speed);
+	if (nRF905SPI_Fd != 0) {
+		REMOTE_CAR_LOG_ERR("nRF905 SPI initial error.");
+		return (-1);
+	}
 	nRF905SPI_CHN = nSPI_Channel;
 	nRF905CRInitial(nRF905SPI_Fd);
 
 	return 0;
 }
+
+int nRF905StartListen(unsigned short int* pHoppingTable) {
+	// generate named pip
+
+	// register ISR to handle data receive when DR rise edge
+
+
+	return 0;
+}
+
+// Block operation until there is any data in named pipe which was written in Data ready ISR
+int nRF905ReadFrame(unsigned char* pReadBuff, int nBuffLen) {
+	return 0;
+}
+
+
