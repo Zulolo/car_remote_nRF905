@@ -14,7 +14,7 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" cleanCommand="rm -rf" description="" id="cdt.managedbuild.config.gnu.cross.exe.debug.1302780728" name="Debug" parent="cdt.managedbuild.config.gnu.cross.exe.debug" postannouncebuildStep="deploy executable" postbuildStep="scp car_remote_nRF905 pi@192.168.0.121:/home/pi/">
+				<configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" cleanCommand="rm -rf" description="" id="cdt.managedbuild.config.gnu.cross.exe.debug.1302780728" name="Debug" parent="cdt.managedbuild.config.gnu.cross.exe.debug" postannouncebuildStep="deploy executable" postbuildStep="scp car_remote_nRF905 pi@192.168.0.121:/home/pi/car_remote/">
 					<folderInfo id="cdt.managedbuild.config.gnu.cross.exe.debug.1302780728." name="/" resourcePath="">
 						<toolChain id="cdt.managedbuild.toolchain.gnu.cross.exe.debug.2029144823" name="Cross GCC" superClass="cdt.managedbuild.toolchain.gnu.cross.exe.debug">
 							<option id="cdt.managedbuild.option.gnu.cross.prefix.906221949" name="Prefix" superClass="cdt.managedbuild.option.gnu.cross.prefix" useByScannerDiscovery="false" value="arm-linux-gnueabihf-" valueType="string"/>
@@ -124,7 +124,7 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" cleanCommand="rm -rf" description="used for unit test" id="cdt.managedbuild.config.gnu.cross.exe.debug.1302780728.1490622117" name="unit_test" parent="cdt.managedbuild.config.gnu.cross.exe.debug" postannouncebuildStep="deploy executable" postbuildStep="scp car_remote_nRF905 pi@192.168.0.121:/home/pi/">
+				<configuration artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.exe" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.exe,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" cleanCommand="rm -rf" description="used for unit test" id="cdt.managedbuild.config.gnu.cross.exe.debug.1302780728.1490622117" name="unit_test" parent="cdt.managedbuild.config.gnu.cross.exe.debug" postannouncebuildStep="deploy executable and run test" postbuildStep="&quot;${workspace_loc:/${ProjName}/unit_test/deploy_run.sh}&quot;">
 					<folderInfo id="cdt.managedbuild.config.gnu.cross.exe.debug.1302780728.1490622117." name="/" resourcePath="">
 						<toolChain id="cdt.managedbuild.toolchain.gnu.cross.exe.debug.1719161230" name="Cross GCC" superClass="cdt.managedbuild.toolchain.gnu.cross.exe.debug">
 							<option id="cdt.managedbuild.option.gnu.cross.prefix.478735707" name="Prefix" superClass="cdt.managedbuild.option.gnu.cross.prefix" useByScannerDiscovery="false" value="arm-linux-gnueabihf-" valueType="string"/>
@@ -135,6 +135,7 @@
 								<option id="gnu.c.compiler.option.debugging.level.91631398" name="Debug Level" superClass="gnu.c.compiler.option.debugging.level" useByScannerDiscovery="false" value="gnu.c.debugging.level.max" valueType="enumerated"/>
 								<option id="gnu.c.compiler.option.include.paths.1735277005" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
 									<listOptionValue builtIn="false" value="/home/zulolo/eclipse-workspace/includes/wiringPi"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/src/unit_test/Unity}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/include}&quot;"/>
 								</option>
 								<option id="gnu.c.compiler.option.dialect.std.330632678" name="Language standard" superClass="gnu.c.compiler.option.dialect.std" useByScannerDiscovery="true" value="gnu.c.compiler.dialect.default" valueType="enumerated"/>
