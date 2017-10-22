@@ -5,18 +5,16 @@
  *      Author: zulolo
  *      Description: Use wiringPi ISR and SPI feature to control nRF905
  */
-#include <stdint.h>
+//#include <stdint.h>
+#include <unistd.h>
 #include "wiringPi.h"
 #include "wiringPiSPI.h"
 #include "system.h"
 
-#define NRF905_TX_EN_PIN				17
-#define NRF905_TRX_CE_PIN				18
-#define NRF905_PWR_UP_PIN				27
-
-#define NRF905_CD_PIN					22
-#define NRF905_AM_PIN					23
-#define NRF905_DR_PIN					24
+#define NRF905_TX_EN_PIN				0
+#define NRF905_TRX_CE_PIN				2
+#define NRF905_PWR_UP_PIN				3
+#define NRF905_DR_PIN					4
 
 #define US_PER_SECONDE					1000000
 #define NRF905_TX_ADDR_LEN				4
@@ -90,11 +88,23 @@ typedef struct _CommTask {
 typedef enum _nRF905Modes {
 	NRF905_MODE_PWR_DOWN = 0,
 	NRF905_MODE_STD_BY,
-	NRF905_MODE_RD_RX,
 	NRF905_MODE_BURST_RX,
 	NRF905_MODE_BURST_TX,
 	NRF905_MODE_MAX
 } nRF905Mode_t;
+
+typedef struct _nRF905PinLevelInMode {
+	int nPWR_UP_PIN;
+	int nTRX_CE_PIN;
+	int nTX_EN_PIN;
+} RF905PinLevelInMode_t;
+
+// Pin status according to each nRF905 mode
+static const RF905PinLevelInMode_t unNRF905MODE_PIN_LEVEL[] = {
+		{ LOW, LOW, LOW},
+		{ HIGH, LOW, LOW },
+		{ HIGH, HIGH, LOW },
+		{ HIGH, HIGH, HIGH } };
 
 typedef struct _NRF905CommThreadPara {
 	int nTaskReadPipe;
@@ -102,26 +112,54 @@ typedef struct _NRF905CommThreadPara {
 } nRF905ThreadPara_t;
 
 // MSB of CH_NO will always be 0
-static uint8_t NRF905_CR_DEFAULT[] = { 0x4C, 0x0C, // F=(422.4+(0x6C<<1)/10)*1; No retransmission; +6db; NOT reduce receive power
+static unsigned char NRF905_CR_DEFAULT[] = { 0x4C, 0x0C, // F=(422.4+(0x6C<<1)/10)*1; No retransmission; +6db; NOT reduce receive power
 		(NRF905_RX_ADDR_LEN << 4) | NRF905_TX_ADDR_LEN,	// 4 bytes RX & TX address;
 		NRF905_RX_PAYLOAD_LEN, NRF905_TX_PAYLOAD_LEN, // 16 bytes RX & TX package length;
 		0x00, 0x0C, 0x40, 0x08,	// RX address is the calculation result of CH_NO
 		0x58 };	// 16MHz crystal; enable CRC; CRC16
 
-enum _nRF905PinPosInModeLevel {
-	NRF905_PWR_UP_PIN_POS = 0, NRF905_TRX_CE_PIN_POS, NRF905_TX_EN_PIN_POS, NRF905_TX_POS_MAX
-};
-
-//static const uint8_t unNRF905MODE_PIN_LEVEL[][NRF905_TX_POS_MAX] = {
-//		{ GPIO_LEVEL_LOW, GPIO_LEVEL_LOW, GPIO_LEVEL_LOW },
-//		{ GPIO_LEVEL_HIGH, GPIO_LEVEL_LOW, GPIO_LEVEL_LOW },
-//		{ GPIO_LEVEL_HIGH, GPIO_LEVEL_LOW, GPIO_LEVEL_LOW },
-//		{ GPIO_LEVEL_HIGH, GPIO_LEVEL_HIGH, GPIO_LEVEL_LOW },
-//		{ GPIO_LEVEL_HIGH, GPIO_LEVEL_HIGH, GPIO_LEVEL_HIGH } };
-
-uint8_t unNeedtoClose = NRF905_FALSE;
-
 static int nRF905SPI_CHN = 0;
+static int nRF905PipeFd[2];
+
+static void readDataFromNRF905(void) {
+
+}
+
+static void switchNRF905ToRecv(void) {
+	// Set nRF905 in RX mode
+	setNRF905Mode(NRF905_MODE_BURST_RX);
+	// register ISR to handle data receive when DR rise edge
+	regDR_Event(NRF905_MODE_BURST_RX);
+}
+
+static int setNRF905Mode(nRF905Mode_t tNRF905Mode) {
+	static nRF905Mode_t tNRF905ModeGlobal = NRF905_MODE_PWR_DOWN;
+
+	if (tNRF905Mode >= NRF905_MODE_MAX){
+		NRF905_LOG_ERR("nRF905 Mode error.");
+		return (-1);
+	}
+	if (tNRF905Mode == tNRF905ModeGlobal){
+		NRF905_LOG_INFO("nRF905 Mode not changed, no need to set pin.");
+		return 0;
+	}
+
+	digitalWrite(NRF905_TX_EN_PIN, unNRF905MODE_PIN_LEVEL[tNRF905Mode].nTX_EN_PIN);
+	digitalWrite(NRF905_TRX_CE_PIN, unNRF905MODE_PIN_LEVEL[tNRF905Mode].nTRX_CE_PIN);
+	digitalWrite(NRF905_PWR_UP_PIN, unNRF905MODE_PIN_LEVEL[tNRF905Mode].nPWR_UP_PIN);
+	tNRF905ModeGlobal = tNRF905Mode;
+
+	return 0;
+}
+
+static int regDR_Event(nRF905Mode_t tNRF905Mode) {
+	if (NRF905_MODE_BURST_RX == tNRF905Mode) {
+		wiringPiISR (NRF905_DR_PIN, INT_EDGE_RISING, &readDataFromNRF905) ;
+	} else if (NRF905_MODE_BURST_TX == tNRF905Mode) {
+		wiringPiISR (NRF905_DR_PIN, INT_EDGE_RISING, &switchNRF905ToRecv) ;
+	}
+	return 0;
+}
 
 static int nRF905SPI_WR(unsigned char *pData, int nDataLen) {
 	return wiringPiSPIDataRW(nRF905SPI_CHN, pData, nDataLen);
@@ -133,11 +171,21 @@ static int nRF905CRInitial(int nRF905SPI_Fd) {
 }
 
 int nRF905Initial(int nSPI_Channel, int nSPI_Speed) {
-	int nRF905SPI_Fd = wiringPiSPISetup(nSPI_Channel, nSPI_Speed);
+	int nRF905SPI_Fd;
+	wiringPiSetup();
+	(void)piHiPri(10);
+
+	pinMode(NRF905_TX_EN_PIN, OUTPUT);
+	pinMode(NRF905_TRX_CE_PIN, OUTPUT);
+	pinMode(NRF905_PWR_UP_PIN, OUTPUT);
+	pinMode(NRF905_DR_PIN, INPUT);
+	setNRF905Mode(NRF905_MODE_STD_BY);
+	nRF905SPI_Fd = wiringPiSPISetup(nSPI_Channel, nSPI_Speed);
 	if (nRF905SPI_Fd != 0) {
-		REMOTE_CAR_LOG_ERR("nRF905 SPI initial error.");
+		NRF905_LOG_ERR("nRF905 SPI initial error.");
 		return (-1);
 	}
+	usleep(3000);
 	nRF905SPI_CHN = nSPI_Channel;
 	nRF905CRInitial(nRF905SPI_Fd);
 
@@ -145,17 +193,30 @@ int nRF905Initial(int nSPI_Channel, int nSPI_Speed) {
 }
 
 int nRF905StartListen(unsigned short int* pHoppingTable) {
-	// generate named pip
+	// generate pip
+	if (pipe(nRF905PipeFd) != 0) {
+		NRF905_LOG_ERR("nRF905 pipe initial error.");
+		return (-1);
+	}
 
+	// Set nRF905 in RX mode
+	setNRF905Mode(NRF905_MODE_BURST_RX);
 	// register ISR to handle data receive when DR rise edge
-
+	regDR_Event(NRF905_MODE_BURST_RX);
 
 	return 0;
 }
 
-// Block operation until there is any data in named pipe which was written in Data ready ISR
+// Block operation until there is any data in the pipe which was written in Data ready ISR
 int nRF905ReadFrame(unsigned char* pReadBuff, int nBuffLen) {
+	return read(nRF905PipeFd[0], pReadBuff, nBuffLen);
+}
+
+int nRF905StartListen(void) {
+	close(nRF905PipeFd[0]);
+	close(nRF905PipeFd[1]);
 	return 0;
 }
+
 
 
