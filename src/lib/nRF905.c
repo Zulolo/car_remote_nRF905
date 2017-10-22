@@ -67,6 +67,7 @@ typedef struct _CommTask {
 #define NRF905_CMD_RRP							0x24
 #define NRF905_CMD_CC(unPwrChn)					((unPwrChn) | 0x1000)
 #define CH_MSK_IN_CC_REG						0x01FF
+#define NRF905_DR_IN_STATUS_REG(status)			((status) & (0x01 << 5))
 
 #define HOPPING_MAX_CD_RETRY_NUM				100
 #define HOPPING_MAX_RETRY_NUM					HOPPING_MAX_CD_RETRY_NUM
@@ -121,8 +122,32 @@ static unsigned char NRF905_CR_DEFAULT[] = { 0x4C, 0x0C, // F=(422.4+(0x6C<<1)/1
 static int nRF905SPI_CHN = 0;
 static int nRF905PipeFd[2];
 
-static void readDataFromNRF905(void) {
+static int nRF905SPI_WR(unsigned char *pData, int nDataLen) {
+	return wiringPiSPIDataRW(nRF905SPI_CHN, pData, nDataLen);
+}
 
+static unsigned char readStatusReg(void) {
+	return 0;
+}
+
+static int readRxPayload(unsigned char* pBuff, int nBuffLen) {
+	return 0;
+}
+
+static int writeConfig(unsigned char unConfigAddr, unsigned char* pBuff, int nBuffLen) {
+	return 0;
+}
+
+static int writeTxAddr(unsigned int unTxAddr) {
+	return 0;
+}
+
+static int writeTxPayload(unsigned char unTxAddr, unsigned char* pBuff, int nBuffLen) {
+	return 0;
+}
+
+static int writeFastConfig(unsigned short int unPA_PLL_CHN) {
+	return 0;
 }
 
 static void switchNRF905ToRecv(void) {
@@ -130,6 +155,21 @@ static void switchNRF905ToRecv(void) {
 	setNRF905Mode(NRF905_MODE_BURST_RX);
 	// register ISR to handle data receive when DR rise edge
 	regDR_Event(NRF905_MODE_BURST_RX);
+}
+
+static void readDataFromNRF905(void) {
+	static unsigned char unReadBuff[32];
+	static unsigned char unStatusReg;
+
+	setNRF905Mode(NRF905_MODE_STD_BY);
+	// make sure DR was set
+	unStatusReg = readStatusReg();
+	if (NRF905_DR_IN_STATUS_REG(unStatusReg) == 0) {
+		switchNRF905ToRecv();
+	} else {
+		readRxPayload(unReadBuff, sizeof(unReadBuff));
+		write(nRF905PipeFd[1], unReadBuff, sizeof(unReadBuff));
+	}
 }
 
 static int setNRF905Mode(nRF905Mode_t tNRF905Mode) {
@@ -159,10 +199,6 @@ static int regDR_Event(nRF905Mode_t tNRF905Mode) {
 		wiringPiISR (NRF905_DR_PIN, INT_EDGE_RISING, &switchNRF905ToRecv) ;
 	}
 	return 0;
-}
-
-static int nRF905SPI_WR(unsigned char *pData, int nDataLen) {
-	return wiringPiSPIDataRW(nRF905SPI_CHN, pData, nDataLen);
 }
 
 static int nRF905CRInitial(int nRF905SPI_Fd) {
@@ -212,7 +248,8 @@ int nRF905ReadFrame(unsigned char* pReadBuff, int nBuffLen) {
 	return read(nRF905PipeFd[0], pReadBuff, nBuffLen);
 }
 
-int nRF905StartListen(void) {
+int nRF905StopListen(void) {
+	setNRF905Mode(NRF905_MODE_STD_BY);
 	close(nRF905PipeFd[0]);
 	close(nRF905PipeFd[1]);
 	return 0;
