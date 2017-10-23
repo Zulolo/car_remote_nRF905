@@ -6,6 +6,8 @@
  *      Description: Use wiringPi ISR and SPI feature to control nRF905
  */
 //#include <stdint.h>
+#include <sys/time.h>       /* for setitimer */
+#include <signal.h>     /* for signal */
 #include <unistd.h>
 #include "wiringPi.h"
 #include "wiringPiSPI.h"
@@ -107,10 +109,14 @@ static const RF905PinLevelInMode_t unNRF905MODE_PIN_LEVEL[] = {
 		{ HIGH, HIGH, LOW },
 		{ HIGH, HIGH, HIGH } };
 
-typedef struct _NRF905CommThreadPara {
-	int nTaskReadPipe;
-	int nBeforeIsRF905SPI_Fd_NowDoNotUse;
-} nRF905ThreadPara_t;
+typedef struct _remoteControlMap {
+	unsigned int unNRF905SendFrameCNT;
+	unsigned int unNRF905HoppingCNT;
+	unsigned int unNRF905CHN_PWR;
+	unsigned int unNRF905RX_Address;
+}RemoteControlMap_t;
+
+static RemoteControlMap_t tRemoteControlMap = {0, 0, 0, 0};
 
 // MSB of CH_NO will always be 0
 static unsigned char NRF905_CR_DEFAULT[] = { 0x4C, 0x0C, // F=(422.4+(0x6C<<1)/10)*1; No retransmission; +6db; NOT reduce receive power
@@ -121,7 +127,11 @@ static unsigned char NRF905_CR_DEFAULT[] = { 0x4C, 0x0C, // F=(422.4+(0x6C<<1)/1
 
 static int nRF905SPI_CHN = 0;
 static int nRF905PipeFd[2];
+static unsigned short int* pRoamingTable;
+static int nRoamingTableLen;
 
+// No set mode in low level APIs because if you set Standby mode
+// then after write SPI you don't know what to change back
 static int nRF905SPI_WR(unsigned char *pData, int nDataLen) {
 	return wiringPiSPIDataRW(nRF905SPI_CHN, pData, nDataLen);
 }
@@ -142,7 +152,9 @@ static int writeTxAddr(unsigned int unTxAddr) {
 	return 0;
 }
 
-static int writeTxPayload(unsigned char unTxAddr, unsigned char* pBuff, int nBuffLen) {
+// TX and RX address are already configured during hopping
+static int writeTxPayload(unsigned char* pBuff, int nBuffLen) {
+
 	return 0;
 }
 
@@ -151,9 +163,7 @@ static int writeFastConfig(unsigned short int unPA_PLL_CHN) {
 }
 
 static void switchNRF905ToRecv(void) {
-	// Set nRF905 in RX mode
 	setNRF905Mode(NRF905_MODE_BURST_RX);
-	// register ISR to handle data receive when DR rise edge
 	regDR_Event(NRF905_MODE_BURST_RX);
 }
 
@@ -167,6 +177,8 @@ static void readDataFromNRF905(void) {
 	if (NRF905_DR_IN_STATUS_REG(unStatusReg) == 0) {
 		switchNRF905ToRecv();
 	} else {
+		// reset monitor timer since communication seems OK
+		setChannelMonitorTimer();
 		readRxPayload(unReadBuff, sizeof(unReadBuff));
 		write(nRF905PipeFd[1], unReadBuff, sizeof(unReadBuff));
 	}
@@ -206,6 +218,14 @@ static int nRF905CRInitial(int nRF905SPI_Fd) {
 	return 0;
 }
 
+static void roamNRF905(void) {
+	static int nHoppingPoint = 0;
+	setNRF905Mode(NRF905_MODE_STD_BY);
+	writeFastConfig(pRoamingTable[nHoppingPoint]);
+	(nHoppingPoint < (nRoamingTableLen - 1)) ? (nHoppingPoint++):(nHoppingPoint = 0);
+	switchNRF905ToRecv();
+}
+
 int nRF905Initial(int nSPI_Channel, int nSPI_Speed) {
 	int nRF905SPI_Fd;
 	wiringPiSetup();
@@ -228,17 +248,49 @@ int nRF905Initial(int nSPI_Channel, int nSPI_Speed) {
 	return 0;
 }
 
-int nRF905StartListen(unsigned short int* pHoppingTable) {
+static int setChannelMonitorTimer(void) {
+	struct itimerval tChannelMonitorTimer;  /* for setting itimer */
+	tChannelMonitorTimer.it_value.tv_sec = 1;
+	tChannelMonitorTimer.it_value.tv_usec = 0;
+	tChannelMonitorTimer.it_interval.tv_sec = 1;
+	tChannelMonitorTimer.it_interval.tv_usec = 0;
+	return setitimer(ITIMER_REAL, &tChannelMonitorTimer, NULL);
+}
+
+int nRF905StartListen(unsigned short int* pHoppingTable, int nTableLen) {
 	// generate pip
+	if (nRF905PipeFd[0] != 0) {
+		close(nRF905PipeFd[0]);
+	}
+	if (nRF905PipeFd[1] != 0) {
+		close(nRF905PipeFd[1]);
+	}
 	if (pipe(nRF905PipeFd) != 0) {
 		NRF905_LOG_ERR("nRF905 pipe initial error.");
 		return (-1);
 	}
-
+	pRoamingTable = pHoppingTable;
+	nRoamingTableLen = nTableLen;
 	// Set nRF905 in RX mode
 	setNRF905Mode(NRF905_MODE_BURST_RX);
 	// register ISR to handle data receive when DR rise edge
 	regDR_Event(NRF905_MODE_BURST_RX);
+
+	// start timer to watch communication, if do RX during 1s, start hopping
+	if (signal(SIGALRM, (void (*)(int)) roamNRF905) == SIG_ERR) {
+		NRF905_LOG_ERR("Unable to catch SIGALRM");
+		close(nRF905PipeFd[0]);
+		close(nRF905PipeFd[1]);
+		return (-1);
+	}
+	raise(SIGALRM);
+
+	if (setChannelMonitorTimer() != 0) {
+		NRF905_LOG_ERR("error calling setitimer()");
+		close(nRF905PipeFd[0]);
+		close(nRF905PipeFd[1]);
+		return (-1);
+	}
 
 	return 0;
 }
@@ -246,6 +298,14 @@ int nRF905StartListen(unsigned short int* pHoppingTable) {
 // Block operation until there is any data in the pipe which was written in Data ready ISR
 int nRF905ReadFrame(unsigned char* pReadBuff, int nBuffLen) {
 	return read(nRF905PipeFd[0], pReadBuff, nBuffLen);
+}
+
+int nRF905SendFrame(unsigned char* pReadBuff, int nBuffLen) {
+	setNRF905Mode(NRF905_MODE_STD_BY);
+	writeTxPayload(pReadBuff, nBuffLen);
+	setNRF905Mode(NRF905_MODE_BURST_TX);
+	regDR_Event(NRF905_MODE_BURST_TX);
+	return 0;
 }
 
 int nRF905StopListen(void) {

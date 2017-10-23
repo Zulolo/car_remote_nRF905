@@ -17,16 +17,11 @@
 
 #include "system.h"
 
-#define NRF905_SPI_CHN			0
-#define NRF905_SPEED			5000000
 
-static const uint16_t unCAR_REMOTE_HOPPING_TAB[] = { 0x884C, 0x883A, 0x8846, 0x8832, 0x884A, 0x8835,
-		0x884B, 0x8837, 0x884F, 0x883E, 0x8847, 0x8838, 0x8844, 0x8834, 0x8843, 0x8834, 0x884B,
-		0x8839, 0x884D, 0x883A, 0x884E, 0x883C, 0x8832, 0x883F };
 
 PI_THREAD (nRF905Thread)
 {
-	nRemoteCarStartReceive(NRF905_SPI_CHN, NRF905_SPEED, unCAR_REMOTE_HOPPING_TAB);
+	nRemoteCarStartReceive();
 }
 
 int main(void) {
