@@ -100,23 +100,25 @@ typedef struct _nRF905PinLevelInMode {
 	int nPWR_UP_PIN;
 	int nTRX_CE_PIN;
 	int nTX_EN_PIN;
-} RF905PinLevelInMode_t;
+} nRF905PinLevelInMode_t;
 
 // Pin status according to each nRF905 mode
-static const RF905PinLevelInMode_t unNRF905MODE_PIN_LEVEL[] = {
+static const nRF905PinLevelInMode_t unNRF905MODE_PIN_LEVEL[] = {
 		{ LOW, LOW, LOW},
 		{ HIGH, LOW, LOW },
 		{ HIGH, HIGH, LOW },
 		{ HIGH, HIGH, HIGH } };
 
-typedef struct _remoteControlMap {
+typedef struct _nRF905Status {
+	unsigned int unNRF905RecvFrameCNT;
 	unsigned int unNRF905SendFrameCNT;
 	unsigned int unNRF905HoppingCNT;
-	unsigned int unNRF905CHN_PWR;
-	unsigned int unNRF905RX_Address;
-}RemoteControlMap_t;
+	unsigned int unNRF905TxAddr;
+	unsigned int unNRF905RxAddr;
+	unsigned short int unNRF905CHN_PWR;
+}nRF905Status_t;
 
-static RemoteControlMap_t tRemoteControlMap = {0, 0, 0, 0};
+static nRF905Status_t tNRF905Status = {0, 0, 0, 0, 0};
 
 // MSB of CH_NO will always be 0
 static unsigned char NRF905_CR_DEFAULT[] = { 0x4C, 0x0C, // F=(422.4+(0x6C<<1)/10)*1; No retransmission; +6db; NOT reduce receive power
@@ -152,6 +154,10 @@ static int writeTxAddr(unsigned int unTxAddr) {
 	return 0;
 }
 
+static int writeRxAddr(unsigned int unTxAddr) {
+	return 0;
+}
+
 // TX and RX address are already configured during hopping
 static int writeTxPayload(unsigned char* pBuff, int nBuffLen) {
 
@@ -179,6 +185,7 @@ static void readDataFromNRF905(void) {
 	} else {
 		// reset monitor timer since communication seems OK
 		setChannelMonitorTimer();
+		tNRF905Status.unNRF905RecvFrameCNT++;
 		readRxPayload(unReadBuff, sizeof(unReadBuff));
 		write(nRF905PipeFd[1], unReadBuff, sizeof(unReadBuff));
 	}
@@ -218,11 +225,25 @@ static int nRF905CRInitial(int nRF905SPI_Fd) {
 	return 0;
 }
 
+static unsigned int getTxAddrFromChnPwr(unsigned int unNRF905CHN_PWR) {
+	return ((unNRF905CHN_PWR | (unNRF905CHN_PWR << 16)) & 0xA33D59AA);
+}
+
+static unsigned int getRxAddrFromChnPwr(unsigned short int unNRF905CHN_PWR) {
+	return ((unNRF905CHN_PWR | (unNRF905CHN_PWR << 16)) & 0x5CA259AA);
+}
+
 static void roamNRF905(void) {
 	static int nHoppingPoint = 0;
 	setNRF905Mode(NRF905_MODE_STD_BY);
-	writeFastConfig(pRoamingTable[nHoppingPoint]);
+	tNRF905Status.unNRF905CHN_PWR = pRoamingTable[nHoppingPoint];
+	tNRF905Status.unNRF905TxAddr = getTxAddrFromChnPwr(tNRF905Status.unNRF905CHN_PWR);
+	tNRF905Status.unNRF905RxAddr = getRxAddrFromChnPwr(tNRF905Status.unNRF905CHN_PWR);
+	writeFastConfig(tNRF905Status.unNRF905CHN_PWR);
+	writeTxAddr(tNRF905Status.unNRF905TxAddr);
+	writeRxAddr(tNRF905Status.unNRF905RxAddr);
 	(nHoppingPoint < (nRoamingTableLen - 1)) ? (nHoppingPoint++):(nHoppingPoint = 0);
+	tNRF905Status.unNRF905HoppingCNT++;
 	switchNRF905ToRecv();
 }
 
@@ -305,6 +326,7 @@ int nRF905SendFrame(unsigned char* pReadBuff, int nBuffLen) {
 	writeTxPayload(pReadBuff, nBuffLen);
 	setNRF905Mode(NRF905_MODE_BURST_TX);
 	regDR_Event(NRF905_MODE_BURST_TX);
+	tNRF905Status.unNRF905SendFrameCNT++;
 	return 0;
 }
 
