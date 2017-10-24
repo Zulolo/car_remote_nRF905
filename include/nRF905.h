@@ -12,8 +12,8 @@
 										closelog()
 
 
-int nRF905Initial(int nSPI_Channel, int nSPI_Speed);
-int nRF905StartListen(unsigned short int* pHoppingTable, int nTableLen);
+int nRF905Initial(int nSPI_Channel, int nSPI_Speed, unsigned char unPower);
+int nRF905StartListen(const unsigned short int* pHoppingTable, int nTableLen);
 int nRF905ReadFrame(unsigned char* pReadBuff, int nBuffLen);
 int nRF905SendFrame(unsigned char* pReadBuff, int nBuffLen);
 

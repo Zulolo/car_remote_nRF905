@@ -31,7 +31,7 @@ int main(void) {
 	nRF905ThreadID = piThreadCreate(nRF905Thread) ;
 	if (nRF905ThreadID != 0) {
 		REMOTE_CAR_LOG_ERR("nRF905 receive thread start error.");
-
+		return EXIT_FAILURE;
 	}
 
 	return EXIT_SUCCESS;
