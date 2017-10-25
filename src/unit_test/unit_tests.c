@@ -2,10 +2,20 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <time.h>
 
 #include "unity.h"
 #include "system.h"
+#include "wiringPi.h"
+#include "nRF905.h"
+#include "nRF905Handler.h"
+
+PI_THREAD (nRF905Thread)
+{
+	nRemoteCarStartReceive();
+	return NULL ;
+}
 
 void test_nSetSystemValue_performance(void){
 	int i;
@@ -25,8 +35,30 @@ void test_nSetSystemValue_performance(void){
 
 }
 
+void test_nrf905_communication(void){
+	int i = 0;
+	int nRF905ThreadID;
+	nRF905ThreadID = piThreadCreate(nRF905Thread) ;
+	if (nRF905ThreadID != 0) {
+		printf("nRF905 receive thread start error.\n");
+		return;
+	}
+
+	while (i < 10) {
+		printf("nRF905 receive frame: %d.\n", getNRF905StatusRecvFrameCNT());
+		printf("nRF905 send frame: %d.\n", getNRF905StatusSendFrameCNT());
+		printf("nRF905 hopping: %d.\n", getNRF905StatusHoppingCNT());
+		i++;
+		sleep(1);
+	}
+}
+
 int main(void) {
+
 	UNITY_BEGIN();
-	RUN_TEST(test_nSetSystemValue_performance);
+//	RUN_TEST(test_nSetSystemValue_performance);
+
+	RUN_TEST(test_nrf905_communication);
+
 	return UNITY_END();
 }

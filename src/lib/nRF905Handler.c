@@ -6,6 +6,7 @@
  */
 
 #include <stdint.h>
+#include <stdio.h>
 #include "system.h"
 #include "nRF905.h"
 
@@ -15,7 +16,7 @@
 #define REMOTE_CAR_SYS_INFO_RF_FRAME_ERR	REMOTE_CAR_SYS_INFO "rf_err_cnt"
 
 #define NRF905_SPI_CHN						0
-#define NRF905_SPEED						5000000
+#define NRF905_SPEED						8000000
 
 static const uint16_t unCAR_REMOTE_HOPPING_TAB[] = { 0x804C, 0x803A, 0x8046, 0x8032, 0x804A, 0x8035,
 		0x804B, 0x8037, 0x804F, 0x803E, 0x8047, 0x8038, 0x8044, 0x8034, 0x8043, 0x8034, 0x804B,

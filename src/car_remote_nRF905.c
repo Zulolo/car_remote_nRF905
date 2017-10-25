@@ -17,11 +17,10 @@
 
 #include "system.h"
 
-
-
 PI_THREAD (nRF905Thread)
 {
 	nRemoteCarStartReceive();
+	return NULL ;
 }
 
 int main(void) {
