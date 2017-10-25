@@ -87,9 +87,10 @@ typedef struct _nRF905Status {
 	unsigned int unNRF905TxAddr;
 	unsigned int unNRF905RxAddr;
 	unsigned short int unNRF905CHN_PWR;
+	nRF905Mode_t tNRF905CurrentMode;
 }nRF905Status_t;
 
-static nRF905Status_t tNRF905Status = {0, 0, 0, 0, 0};
+static nRF905Status_t tNRF905Status = {0, 0, 0, 0, 0, NRF905_MODE_PWR_DOWN};
 
 // MSB of CH_NO will always be 0
 static const unsigned char NRF905_CR_DEFAULT[] = { 0x4C, 0x0C, // F=(422.4+(0x6C<<1)/10)*1; No retransmission; +6db; NOT reduce receive power
@@ -106,17 +107,39 @@ static unsigned char unNRF905Power;
 
 static int regDR_Event(nRF905Mode_t tNRF905Mode);
 
+static int setNRF905Mode(nRF905Mode_t tNRF905Mode) {
+	if (tNRF905Mode >= NRF905_MODE_MAX){
+		NRF905_LOG_ERR("nRF905 Mode error.");
+		return (-1);
+	}
+	if (tNRF905Mode == tNRF905Status.tNRF905CurrentMode){
+		NRF905_LOG_INFO("nRF905 Mode not changed, no need to set pin.");
+		return 0;
+	}
+
+	digitalWrite(NRF905_TX_EN_PIN, unNRF905MODE_PIN_LEVEL[tNRF905Mode].nTX_EN_PIN);
+	digitalWrite(NRF905_TRX_CE_PIN, unNRF905MODE_PIN_LEVEL[tNRF905Mode].nTRX_CE_PIN);
+	digitalWrite(NRF905_PWR_UP_PIN, unNRF905MODE_PIN_LEVEL[tNRF905Mode].nPWR_UP_PIN);
+	tNRF905Status.tNRF905CurrentMode = tNRF905Mode;
+
+	return 0;
+}
+
 // No set mode in low level APIs because if you set Standby mode
 // then after write SPI you don't know what to change back
 static int nRF905SPI_WR_CMD(unsigned char unCMD, const unsigned char *pData, int nDataLen) {
 	int nResult;
+	nRF905Mode_t tPreMode;
 	unsigned char* pBuff;
 	if (nDataLen > 0) {
 		pBuff = malloc(nDataLen + 1);
 		if (pBuff) {
 			pBuff[0] = unCMD;
 			memcpy(pBuff + 1, pData, nDataLen);
+			tPreMode = tNRF905Status.tNRF905CurrentMode;
+			setNRF905Mode(NRF905_MODE_STD_BY);
 			nResult = wiringPiSPIDataRW(nRF905SPI_CHN, pBuff, nDataLen + 1);
+			setNRF905Mode(tPreMode);
 			free(pBuff);
 			return nResult;
 		} else {
@@ -129,9 +152,13 @@ static int nRF905SPI_WR_CMD(unsigned char unCMD, const unsigned char *pData, int
 
 static int readStatusReg(void) {
 	int nResult;
+	nRF905Mode_t tPreMode;
 	unsigned char unStatus;
 	unStatus = NRF905_CMD_RC(1);
+	tPreMode = tNRF905Status.tNRF905CurrentMode;
+	setNRF905Mode(NRF905_MODE_STD_BY);
 	nResult = wiringPiSPIDataRW(nRF905SPI_CHN, &unStatus, 1);
+	setNRF905Mode(tPreMode);
 	if (0 == nResult) {
 		return unStatus;
 	} else {
@@ -142,9 +169,30 @@ static int readStatusReg(void) {
 static int readRxPayload(unsigned char* pBuff, int nBuffLen) {
 	int nResult;
 	unsigned char unReadBuff[33];
+	nRF905Mode_t tPreMode;
 	if ((nBuffLen > 0) && (nBuffLen < sizeof(unReadBuff))) {
 		unReadBuff[0] = NRF905_CMD_RTP;
+		tPreMode = tNRF905Status.tNRF905CurrentMode;
+		setNRF905Mode(NRF905_MODE_STD_BY);
 		nResult = wiringPiSPIDataRW(nRF905SPI_CHN, unReadBuff, nBuffLen + 1);
+		setNRF905Mode(tPreMode);
+		memcpy(pBuff, unReadBuff + 1, nBuffLen);
+		return nResult;
+	} else {
+		return (-1);
+	}
+}
+
+int readConfig(unsigned char unConfigAddr, unsigned char* pBuff, int nBuffLen) {
+	int nResult;
+	nRF905Mode_t tPreMode;
+	unsigned char unReadBuff[33];
+	if ((nBuffLen > 0) && (nBuffLen < sizeof(unReadBuff))) {
+		unReadBuff[0] = NRF905_CMD_RC(unConfigAddr);
+		tPreMode = tNRF905Status.tNRF905CurrentMode;
+		setNRF905Mode(NRF905_MODE_STD_BY);
+		nResult = wiringPiSPIDataRW(nRF905SPI_CHN, unReadBuff, nBuffLen + 1);
+		setNRF905Mode(tPreMode);
 		memcpy(pBuff, unReadBuff + 1, nBuffLen);
 		return nResult;
 	} else {
@@ -170,27 +218,13 @@ static int writeTxPayload(unsigned char* pBuff, int nBuffLen) {
 }
 
 static int writeFastConfig(unsigned short int unPA_PLL_CHN) {
-	return wiringPiSPIDataRW(nRF905SPI_CHN, (unsigned char *)(&unPA_PLL_CHN), 2);
-}
-
-static int setNRF905Mode(nRF905Mode_t tNRF905Mode) {
-	static nRF905Mode_t tNRF905ModeGlobal = NRF905_MODE_PWR_DOWN;
-
-	if (tNRF905Mode >= NRF905_MODE_MAX){
-		NRF905_LOG_ERR("nRF905 Mode error.");
-		return (-1);
-	}
-	if (tNRF905Mode == tNRF905ModeGlobal){
-		NRF905_LOG_INFO("nRF905 Mode not changed, no need to set pin.");
-		return 0;
-	}
-
-	digitalWrite(NRF905_TX_EN_PIN, unNRF905MODE_PIN_LEVEL[tNRF905Mode].nTX_EN_PIN);
-	digitalWrite(NRF905_TRX_CE_PIN, unNRF905MODE_PIN_LEVEL[tNRF905Mode].nTRX_CE_PIN);
-	digitalWrite(NRF905_PWR_UP_PIN, unNRF905MODE_PIN_LEVEL[tNRF905Mode].nPWR_UP_PIN);
-	tNRF905ModeGlobal = tNRF905Mode;
-
-	return 0;
+	int nResult;
+	nRF905Mode_t tPreMode;
+	tPreMode = tNRF905Status.tNRF905CurrentMode;
+	setNRF905Mode(NRF905_MODE_STD_BY);
+	nResult = wiringPiSPIDataRW(nRF905SPI_CHN, (unsigned char *)(&unPA_PLL_CHN), 2);
+	setNRF905Mode(tPreMode);
+	return nResult;
 }
 
 static int setChannelMonitorTimer(void) {

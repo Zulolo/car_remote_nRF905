@@ -38,6 +38,7 @@ void test_nSetSystemValue_performance(void){
 void test_nrf905_communication(void){
 	int i = 0;
 	int nRF905ThreadID;
+	unsigned char unReadBuff[32];
 	nRF905ThreadID = piThreadCreate(nRF905Thread) ;
 	if (nRF905ThreadID != 0) {
 		printf("nRF905 receive thread start error.\n");
@@ -50,6 +51,11 @@ void test_nrf905_communication(void){
 		printf("nRF905 hopping: %d.\n", getNRF905StatusHoppingCNT());
 		i++;
 		sleep(1);
+	}
+	readConfig(0, unReadBuff, 10);
+	printf("nRF905 config: \n");
+	for (i = 0; i < 10; i++) {
+		printf("0x%02X \n", unReadBuff[i]);
 	}
 }
 

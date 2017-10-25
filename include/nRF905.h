@@ -16,6 +16,7 @@ int nRF905Initial(int nSPI_Channel, int nSPI_Speed, unsigned char unPower);
 int nRF905StartListen(const unsigned short int* pHoppingTable, int nTableLen);
 int nRF905ReadFrame(unsigned char* pReadBuff, int nBuffLen);
 int nRF905SendFrame(unsigned char* pReadBuff, int nBuffLen);
+int readConfig(unsigned char unConfigAddr, unsigned char* pBuff, int nBuffLen);
 unsigned int getNRF905StatusRecvFrameCNT(void);
 unsigned int getNRF905StatusSendFrameCNT(void);
 unsigned int getNRF905StatusHoppingCNT(void);
