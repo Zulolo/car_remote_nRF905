@@ -373,6 +373,8 @@ int nRF905SendFrame(unsigned char* pReadBuff, int nBuffLen) {
 	writeTxPayload(pReadBuff, nBuffLen);
 	setNRF905Mode(NRF905_MODE_BURST_TX);
 	regDR_Event(NRF905_MODE_BURST_TX);
+	// TODO: Better to add timeout here in case DR will not be set.
+	// My main task is to receive!
 	piLock(NRF905STATUS_LOCK);
 	tNRF905Status.unNRF905SendFrameCNT++;
 	piUnlock(NRF905STATUS_LOCK);
