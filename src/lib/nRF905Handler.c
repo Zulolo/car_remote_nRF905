@@ -41,6 +41,8 @@ int32_t nRemoteCarStartReceive(void) {
 			if (nRemoteCarControl(unRF_Frame) != 0) {
 				REMOTE_CAR_LOG_ERR("Parse received data error.");
 				nIncrSystemValue(REMOTE_CAR_SYS_INFO_RF_FRAME_ERR);
+			} else {
+				nRF905SendFrame(unRF_Frame, sizeof(unRF_Frame));
 			}
 		} else {
 			REMOTE_CAR_LOG_ERR("Remote car receive data from nRF905 error.");

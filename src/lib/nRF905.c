@@ -47,7 +47,7 @@
 #define NRF905_CMD_WTA							0x22
 #define NRF905_CMD_RTA							0x23
 #define NRF905_CMD_RRP							0x24
-#define NRF905_CMD_CC(unPwrChn)					((unPwrChn) | 0x1000)
+#define NRF905_CMD_CC(unPwrChn)					((unPwrChn) | 0x8000)
 #define CH_MSK_IN_CC_REG						0x01FF
 #define NRF905_DR_IN_STATUS_REG(status)			((status) & (0x01 << 5))
 
@@ -251,6 +251,7 @@ static void readDataFromNRF905(void) {
 		tNRF905Status.unNRF905RecvFrameCNT++;
 		piUnlock(NRF905STATUS_LOCK);
 		readRxPayload(unReadBuff, sizeof(unReadBuff));
+		printf("New frame received: 0x%02X 0x%02X.\n", unReadBuff[0], unReadBuff[1]);
 		if (write(nRF905PipeFd[1], unReadBuff, sizeof(unReadBuff)) != sizeof(unReadBuff)) {
 			NRF905_LOG_ERR("Write nRF905 pipe error");
 		}
