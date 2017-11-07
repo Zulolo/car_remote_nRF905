@@ -38,6 +38,8 @@ int32_t nRemoteCarStartReceive(void) {
 	nRF905StartListen(unCAR_REMOTE_HOPPING_TAB, sizeof(unCAR_REMOTE_HOPPING_TAB)/sizeof(uint16_t));
 	while (1) {
 		if (nRF905ReadFrame(unRF_Frame, sizeof(unRF_Frame)) > 0) {
+//			printf("Remote car received: 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X.\n",
+//					unRF_Frame[0], unRF_Frame[1], unRF_Frame[2], unRF_Frame[3], unRF_Frame[4]);
 			if (nRemoteCarControl(unRF_Frame) != 0) {
 				REMOTE_CAR_LOG_ERR("Parse received data error.");
 				nIncrSystemValue(REMOTE_CAR_SYS_INFO_RF_FRAME_ERR);
@@ -45,6 +47,7 @@ int32_t nRemoteCarStartReceive(void) {
 				nRF905SendFrame(unRF_Frame, sizeof(unRF_Frame));
 			}
 		} else {
+			printf("Remote car receive data from nRF905 error.\n");
 			REMOTE_CAR_LOG_ERR("Remote car receive data from nRF905 error.");
 			nSetSystemValue(REMOTE_CAR_SYS_INFO_RF_STATUS, "RF receive data error");
 			return (-1);

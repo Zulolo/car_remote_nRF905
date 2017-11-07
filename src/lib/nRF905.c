@@ -91,7 +91,7 @@ static nRF905Status_t tNRF905Status = {0, 0, 0, 0, 0, NRF905_MODE_PWR_DOWN};
 // MSB of CH_NO will always be 0
 static const unsigned char NRF905_CR_DEFAULT[] = { 0x4C, 0x0C, // F=(422.4+(0x6C<<1)/10)*1; No retransmission; +6db; NOT reduce receive power
 		(NRF905_RX_ADDR_LEN << 4) | NRF905_TX_ADDR_LEN,	// 4 bytes RX & TX address;
-		NRF905_RX_PAYLOAD_LEN, NRF905_TX_PAYLOAD_LEN, // 16 bytes RX & TX package length;
+		NRF905_RX_PAYLOAD_LEN, NRF905_TX_PAYLOAD_LEN, // 32 bytes RX & TX package length;
 		0x00, 0x0C, 0x40, 0x08,	// RX address is the calculation result of CH_NO
 		0x58 };	// 16MHz crystal; enable CRC; CRC16
 
@@ -107,10 +107,11 @@ static int setNRF905Mode(nRF905Mode_t tNRF905Mode) {
 		return (-1);
 	}
 	if (tNRF905Mode == tNRF905Status.tNRF905CurrentMode){
-		NRF905_LOG_INFO("nRF905 Mode not changed, no need to set pin.");
+//		NRF905_LOG_INFO("nRF905 Mode not changed, no need to set pin.");
 		return 0;
 	}
 
+//	printf("Set nRF905 mode to %d.\n", tNRF905Mode);
 	digitalWrite(NRF905_TX_EN_PIN, unNRF905MODE_PIN_LEVEL[tNRF905Mode].nTX_EN_PIN);
 	digitalWrite(NRF905_TRX_CE_PIN, unNRF905MODE_PIN_LEVEL[tNRF905Mode].nTRX_CE_PIN);
 	digitalWrite(NRF905_PWR_UP_PIN, unNRF905MODE_PIN_LEVEL[tNRF905Mode].nPWR_UP_PIN);
@@ -165,7 +166,7 @@ static int readRxPayload(unsigned char* pBuff, int nBuffLen) {
 	unsigned char unReadBuff[33];
 	nRF905Mode_t tPreMode;
 	if ((nBuffLen > 0) && (nBuffLen < sizeof(unReadBuff))) {
-		unReadBuff[0] = NRF905_CMD_RTP;
+		unReadBuff[0] = NRF905_CMD_RRP;
 		tPreMode = tNRF905Status.tNRF905CurrentMode;
 		setNRF905Mode(NRF905_MODE_STD_BY);
 		nResult = wiringPiSPIDataRW(nRF905SPI_CHN, unReadBuff, nBuffLen + 1);
@@ -208,7 +209,8 @@ static int writeRxAddr(unsigned int unRxAddr) {
 
 // TX and RX address are already configured during hopping
 static int writeTxPayload(unsigned char* pBuff, int nBuffLen) {
-	return writeConfig(NRF905_CMD_WTP, pBuff, nBuffLen);
+//	printf("writeTxPayload\n");
+	return nRF905SPI_WR_CMD(NRF905_CMD_WTP, pBuff, nBuffLen);
 }
 
 static int writeFastConfig(unsigned short int unPA_PLL_CHN) {
@@ -235,34 +237,39 @@ static void dataReadyHandler(void) {
 	static unsigned char unReadBuff[32];
 	static int nStatusReg;
 
-	piLock(NRF905STATUS_LOCK);
+//	piLock(NRF905STATUS_LOCK);
 	if (NRF905_MODE_BURST_RX == tNRF905Status.tNRF905CurrentMode) {
-		piUnlock(NRF905STATUS_LOCK);
+//		piUnlock(NRF905STATUS_LOCK);
 		setNRF905Mode(NRF905_MODE_STD_BY);
+//		printf("DR set during RX.\n");
 		// make sure DR was set
 		nStatusReg = readStatusReg();
 		if ((nStatusReg >= 0) && (NRF905_DR_IN_STATUS_REG(nStatusReg) == 0)) {
 			// Strange happens, do something?
 			NRF905_LOG_ERR("Strange happens. DR pin set but status register not.");
 		} else {
-			printf("Data ready rising edge detected.\n");
+//			printf("Data ready rising edge detected.\n");
 			// reset monitor timer since communication seems OK
 	//		setChannelMonitorTimer();
 	//		piLock(NRF905STATUS_LOCK);
 	//		tNRF905Status.unNRF905RecvFrameCNT++;
 	//		piUnlock(NRF905STATUS_LOCK);
+//			printf("Read RX payload.\n");
 			readRxPayload(unReadBuff, sizeof(unReadBuff));
-			printf("New frame received: 0x%02X 0x%02X.\n", unReadBuff[0], unReadBuff[1]);
-	//		if (write(nRF905PipeFd[1], unReadBuff, sizeof(unReadBuff)) != sizeof(unReadBuff)) {
-	//			NRF905_LOG_ERR("Write nRF905 pipe error");
-	//		}
+//			printf("New frame received: 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X.\n",
+//					unReadBuff[0], unReadBuff[1], unReadBuff[2], unReadBuff[3], unReadBuff[4]);
+//			printf("Write payload to pipe.\n");
+			if (write(nRF905PipeFd[1], unReadBuff, sizeof(unReadBuff)) != sizeof(unReadBuff)) {
+				NRF905_LOG_ERR("Write nRF905 pipe error");
+			}
 		}
-		setNRF905Mode(NRF905_MODE_BURST_RX);
+//		setNRF905Mode(NRF905_MODE_BURST_RX);
 	} else if (NRF905_MODE_BURST_TX == tNRF905Status.tNRF905CurrentMode) {
-		piUnlock(NRF905STATUS_LOCK);
+//		piUnlock(NRF905STATUS_LOCK);
+//		printf("DR set during TX, switch to receive mode.\n");
 		setNRF905Mode(NRF905_MODE_BURST_RX);
 	} else {
-		piUnlock(NRF905STATUS_LOCK);
+//		piUnlock(NRF905STATUS_LOCK);
 		NRF905_LOG_ERR("Data ready pin was set but status is neither TX nor RX.");
 	}
 }
@@ -304,6 +311,7 @@ static void roamNRF905(void) {
 
 int nRF905Initial(int nSPI_Channel, int nSPI_Speed, unsigned char unPower) {
 	int nRF905SPI_Fd;
+	unsigned char unCRValue[10];
 	wiringPiSetup();
 	(void)piHiPri(10);
 
@@ -321,7 +329,11 @@ int nRF905Initial(int nSPI_Channel, int nSPI_Speed, unsigned char unPower) {
 	usleep(3000);
 	nRF905SPI_CHN = nSPI_Channel;
 	nRF905CRInitial(nRF905SPI_Fd);
-
+	readConfig(0, unCRValue, sizeof(unCRValue));
+	printf("CR value read is: 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, "
+			"0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X\n",
+			unCRValue[0], unCRValue[1], unCRValue[2], unCRValue[3], unCRValue[4],
+			unCRValue[5], unCRValue[6], unCRValue[7], unCRValue[8], unCRValue[9]);
 	return 0;
 }
 
@@ -378,14 +390,22 @@ int nRF905ReadFrame(unsigned char* pReadBuff, int nBuffLen) {
 }
 
 int nRF905SendFrame(unsigned char* pReadBuff, int nBuffLen) {
-	setNRF905Mode(NRF905_MODE_STD_BY);
+//	printf("nRF905SendFrame\n");
+//	printf("writeTxAddr\n");
+	writeTxAddr(TEST_NRF905_TX_ADDR);
+//	printf("writeRxAddr\n");
+	writeRxAddr(TEST_NRF905_RX_ADDR);
+//	printf("writeTxPayload\n");
 	writeTxPayload(pReadBuff, nBuffLen);
+//	printf("setNRF905Mode to TX \n");
 	setNRF905Mode(NRF905_MODE_BURST_TX);
+//	usleep(2000);
+//	setNRF905Mode(NRF905_MODE_BURST_RX);
 	// TODO: Better to add timeout here in case DR will not be set.
 	// My main task is to receive!
-	piLock(NRF905STATUS_LOCK);
-	tNRF905Status.unNRF905SendFrameCNT++;
-	piUnlock(NRF905STATUS_LOCK);
+//	piLock(NRF905STATUS_LOCK);
+//	tNRF905Status.unNRF905SendFrameCNT++;
+//	piUnlock(NRF905STATUS_LOCK);
 	return 0;
 }
 
