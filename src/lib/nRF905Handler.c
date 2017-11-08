@@ -29,7 +29,9 @@ int32_t nRemoteCarControl(uint8_t* pData) {
 int32_t nRemoteCarStartReceive(void) {
 	uint8_t unRF_Frame[32];
 
+//	printf("nClearSystemValue start.\n");
 	nClearSystemValue(REMOTE_CAR_SYS_INFO_RF_FRAME_ERR);
+//	printf("nRF905Initial start.\n");
 	if (nRF905Initial(NRF905_SPI_CHN, NRF905_SPEED, 3) != 0) {
 		REMOTE_CAR_LOG_ERR("Initial nRF905 SPI for remote car error.");
 		nSetSystemValue(REMOTE_CAR_SYS_INFO_RF_STATUS, "RF init error");

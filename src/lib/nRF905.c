@@ -106,16 +106,20 @@ static int setNRF905Mode(nRF905Mode_t tNRF905Mode) {
 		NRF905_LOG_ERR("nRF905 Mode error.");
 		return (-1);
 	}
+	piLock(NRF905STATUS_LOCK);
 	if (tNRF905Mode == tNRF905Status.tNRF905CurrentMode){
+		piUnlock(NRF905STATUS_LOCK);
 //		NRF905_LOG_INFO("nRF905 Mode not changed, no need to set pin.");
 		return 0;
 	}
-
+	piUnlock(NRF905STATUS_LOCK);
 //	printf("Set nRF905 mode to %d.\n", tNRF905Mode);
 	digitalWrite(NRF905_TX_EN_PIN, unNRF905MODE_PIN_LEVEL[tNRF905Mode].nTX_EN_PIN);
 	digitalWrite(NRF905_TRX_CE_PIN, unNRF905MODE_PIN_LEVEL[tNRF905Mode].nTRX_CE_PIN);
 	digitalWrite(NRF905_PWR_UP_PIN, unNRF905MODE_PIN_LEVEL[tNRF905Mode].nPWR_UP_PIN);
+	piLock(NRF905STATUS_LOCK);
 	tNRF905Status.tNRF905CurrentMode = tNRF905Mode;
+	piUnlock(NRF905STATUS_LOCK);
 
 	return 0;
 }
@@ -224,22 +228,21 @@ static int writeFastConfig(unsigned short int unPA_PLL_CHN) {
 }
 
 static int setChannelMonitorTimer(void) {
-	return 0;
-//	struct itimerval tChannelMonitorTimer;  /* for setting itimer */
-//	tChannelMonitorTimer.it_value.tv_sec = 1;
-//	tChannelMonitorTimer.it_value.tv_usec = 0;
-//	tChannelMonitorTimer.it_interval.tv_sec = 1;
-//	tChannelMonitorTimer.it_interval.tv_usec = 0;
-//	return setitimer(ITIMER_REAL, &tChannelMonitorTimer, NULL);
+	struct itimerval tChannelMonitorTimer;  /* for setting itimer */
+	tChannelMonitorTimer.it_value.tv_sec = 1;
+	tChannelMonitorTimer.it_value.tv_usec = 0;
+	tChannelMonitorTimer.it_interval.tv_sec = 1;
+	tChannelMonitorTimer.it_interval.tv_usec = 0;
+	return setitimer(ITIMER_REAL, &tChannelMonitorTimer, NULL);
 }
 
 static void dataReadyHandler(void) {
 	static unsigned char unReadBuff[32];
 	static int nStatusReg;
 
-//	piLock(NRF905STATUS_LOCK);
+	piLock(NRF905STATUS_LOCK);
 	if (NRF905_MODE_BURST_RX == tNRF905Status.tNRF905CurrentMode) {
-//		piUnlock(NRF905STATUS_LOCK);
+		piUnlock(NRF905STATUS_LOCK);
 		setNRF905Mode(NRF905_MODE_STD_BY);
 //		printf("DR set during RX.\n");
 		// make sure DR was set
@@ -250,10 +253,10 @@ static void dataReadyHandler(void) {
 		} else {
 //			printf("Data ready rising edge detected.\n");
 			// reset monitor timer since communication seems OK
-	//		setChannelMonitorTimer();
-	//		piLock(NRF905STATUS_LOCK);
-	//		tNRF905Status.unNRF905RecvFrameCNT++;
-	//		piUnlock(NRF905STATUS_LOCK);
+			setChannelMonitorTimer();
+			piLock(NRF905STATUS_LOCK);
+			tNRF905Status.unNRF905RecvFrameCNT++;
+			piUnlock(NRF905STATUS_LOCK);
 //			printf("Read RX payload.\n");
 			readRxPayload(unReadBuff, sizeof(unReadBuff));
 //			printf("New frame received: 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X.\n",
@@ -263,13 +266,14 @@ static void dataReadyHandler(void) {
 				NRF905_LOG_ERR("Write nRF905 pipe error");
 			}
 		}
+		// Response shall be sent before continue receiving
 //		setNRF905Mode(NRF905_MODE_BURST_RX);
 	} else if (NRF905_MODE_BURST_TX == tNRF905Status.tNRF905CurrentMode) {
-//		piUnlock(NRF905STATUS_LOCK);
+		piUnlock(NRF905STATUS_LOCK);
 //		printf("DR set during TX, switch to receive mode.\n");
 		setNRF905Mode(NRF905_MODE_BURST_RX);
 	} else {
-//		piUnlock(NRF905STATUS_LOCK);
+		piUnlock(NRF905STATUS_LOCK);
 		NRF905_LOG_ERR("Data ready pin was set but status is neither TX nor RX.");
 	}
 }
@@ -294,7 +298,7 @@ static unsigned int getRxAddrFromChnPwr(unsigned short int unNRF905CHN_PWR) {
 
 static void roamNRF905(void) {
 	static int nHoppingPoint = 0;
-
+	printf("Start hopping.\n");
 	setNRF905Mode(NRF905_MODE_STD_BY);
 	piLock(NRF905STATUS_LOCK);
 	tNRF905Status.unNRF905CHN_PWR = GET_CHN_PWR_FAST_CONFIG(pRoamingTable[nHoppingPoint], unNRF905Power);
@@ -312,10 +316,14 @@ static void roamNRF905(void) {
 int nRF905Initial(int nSPI_Channel, int nSPI_Speed, unsigned char unPower) {
 	int nRF905SPI_Fd;
 	unsigned char unCRValue[10];
+
+//	printf("wiringPiSetup.\n");
 	wiringPiSetup();
+//	printf("Set piHiPri.\n");
 	(void)piHiPri(10);
 
 	unNRF905Power = unPower;
+//	printf("Set pinMode.\n");
 	pinMode(NRF905_TX_EN_PIN, OUTPUT);
 	pinMode(NRF905_TRX_CE_PIN, OUTPUT);
 	pinMode(NRF905_PWR_UP_PIN, OUTPUT);
@@ -328,7 +336,9 @@ int nRF905Initial(int nSPI_Channel, int nSPI_Speed, unsigned char unPower) {
 	}
 	usleep(3000);
 	nRF905SPI_CHN = nSPI_Channel;
+//	printf("nRF905CRInitial.\n");
 	nRF905CRInitial(nRF905SPI_Fd);
+//	printf("readConfig.\n");
 	readConfig(0, unCRValue, sizeof(unCRValue));
 	printf("CR value read is: 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, "
 			"0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X\n",
@@ -353,22 +363,23 @@ int nRF905StartListen(const unsigned short int* pHoppingTable, int nTableLen) {
 	nRoamingTableLen = nTableLen;
 
 	// For test only, fix channel, TX and RX address, no hopping
-	writeTxAddr(TEST_NRF905_TX_ADDR);
-	writeRxAddr(TEST_NRF905_RX_ADDR);
+//	writeTxAddr(TEST_NRF905_TX_ADDR);
+//	writeRxAddr(TEST_NRF905_RX_ADDR);
 
 	// Set nRF905 in RX mode
 	setNRF905Mode(NRF905_MODE_BURST_RX);
 	// register ISR to handle data receive when DR rise edge
 	regDR_Event();
 
+	printf("Start registering SIGALM.\n");
 	// start timer to watch communication, if do RX during 1s, start hopping
-//	if (signal(SIGALRM, (void (*)(int)) roamNRF905) == SIG_ERR) {
-//		NRF905_LOG_ERR("Unable to catch SIGALRM");
-//		close(nRF905PipeFd[0]);
-//		close(nRF905PipeFd[1]);
-//		return (-1);
-//	}
-//	raise(SIGALRM);
+	if (signal(SIGALRM, (void (*)(int)) roamNRF905) == SIG_ERR) {
+		NRF905_LOG_ERR("Unable to catch SIGALRM");
+		close(nRF905PipeFd[0]);
+		close(nRF905PipeFd[1]);
+		return (-1);
+	}
+	raise(SIGALRM);
 
 	if (setChannelMonitorTimer() != 0) {
 		NRF905_LOG_ERR("error calling setitimer()");
@@ -390,22 +401,15 @@ int nRF905ReadFrame(unsigned char* pReadBuff, int nBuffLen) {
 }
 
 int nRF905SendFrame(unsigned char* pReadBuff, int nBuffLen) {
-//	printf("nRF905SendFrame\n");
-//	printf("writeTxAddr\n");
-	writeTxAddr(TEST_NRF905_TX_ADDR);
-//	printf("writeRxAddr\n");
-	writeRxAddr(TEST_NRF905_RX_ADDR);
 //	printf("writeTxPayload\n");
 	writeTxPayload(pReadBuff, nBuffLen);
 //	printf("setNRF905Mode to TX \n");
 	setNRF905Mode(NRF905_MODE_BURST_TX);
-//	usleep(2000);
-//	setNRF905Mode(NRF905_MODE_BURST_RX);
 	// TODO: Better to add timeout here in case DR will not be set.
 	// My main task is to receive!
-//	piLock(NRF905STATUS_LOCK);
-//	tNRF905Status.unNRF905SendFrameCNT++;
-//	piUnlock(NRF905STATUS_LOCK);
+	piLock(NRF905STATUS_LOCK);
+	tNRF905Status.unNRF905SendFrameCNT++;
+	piUnlock(NRF905STATUS_LOCK);
 	return 0;
 }
 
