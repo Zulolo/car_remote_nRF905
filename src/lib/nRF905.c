@@ -24,8 +24,6 @@
 
 #define NRF905_TX_ADDR_LEN				4
 #define NRF905_RX_ADDR_LEN				4
-#define NRF905_RX_PAYLOAD_LEN			32
-#define NRF905_TX_PAYLOAD_LEN			NRF905_RX_PAYLOAD_LEN
 #define TEST_NRF905_TX_ADDR				0x87654321
 #define TEST_NRF905_RX_ADDR				0x12345678
 
@@ -91,7 +89,7 @@ static nRF905Status_t tNRF905Status = {0, 0, 0, 0, 0, NRF905_MODE_PWR_DOWN};
 // MSB of CH_NO will always be 0
 static const unsigned char NRF905_CR_DEFAULT[] = { 0x4C, 0x0C, // F=(422.4+(0x6C<<1)/10)*1; No retransmission; +6db; NOT reduce receive power
 		(NRF905_RX_ADDR_LEN << 4) | NRF905_TX_ADDR_LEN,	// 4 bytes RX & TX address;
-		NRF905_RX_PAYLOAD_LEN, NRF905_TX_PAYLOAD_LEN, // 32 bytes RX & TX package length;
+		NRF905_RX_PAYLOAD_LEN, NRF905_TX_PAYLOAD_LEN, // 16 bytes RX & TX package length;
 		0x00, 0x0C, 0x40, 0x08,	// RX address is the calculation result of CH_NO
 		0x58 };	// 16MHz crystal; enable CRC; CRC16
 
@@ -227,17 +225,17 @@ static int writeFastConfig(unsigned short int unPA_PLL_CHN) {
 	return nResult;
 }
 
-static int setChannelMonitorTimer(void) {
+static int setChannelMonitorTimer(int nSeconds) {
 	struct itimerval tChannelMonitorTimer;  /* for setting itimer */
-	tChannelMonitorTimer.it_value.tv_sec = 1;
+	tChannelMonitorTimer.it_value.tv_sec = nSeconds;
 	tChannelMonitorTimer.it_value.tv_usec = 0;
-	tChannelMonitorTimer.it_interval.tv_sec = 1;
+	tChannelMonitorTimer.it_interval.tv_sec = nSeconds;
 	tChannelMonitorTimer.it_interval.tv_usec = 0;
 	return setitimer(ITIMER_REAL, &tChannelMonitorTimer, NULL);
 }
 
 static void dataReadyHandler(void) {
-	static unsigned char unReadBuff[32];
+	static unsigned char unReadBuff[NRF905_RX_PAYLOAD_LEN];
 	static int nStatusReg;
 
 	piLock(NRF905STATUS_LOCK);
@@ -253,7 +251,7 @@ static void dataReadyHandler(void) {
 		} else {
 //			printf("Data ready rising edge detected.\n");
 			// reset monitor timer since communication seems OK
-			setChannelMonitorTimer();
+			setChannelMonitorTimer(1);
 			piLock(NRF905STATUS_LOCK);
 			tNRF905Status.unNRF905RecvFrameCNT++;
 			piUnlock(NRF905STATUS_LOCK);
@@ -381,7 +379,7 @@ int nRF905StartListen(const unsigned short int* pHoppingTable, int nTableLen) {
 	}
 	raise(SIGALRM);
 
-	if (setChannelMonitorTimer() != 0) {
+	if (setChannelMonitorTimer(1) != 0) {
 		NRF905_LOG_ERR("error calling setitimer()");
 		close(nRF905PipeFd[0]);
 		close(nRF905PipeFd[1]);

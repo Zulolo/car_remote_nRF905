@@ -11,6 +11,8 @@
 										syslog(LOG_USER | LOG_INFO, arg);\
 										closelog()
 
+#define NRF905_RX_PAYLOAD_LEN			16
+#define NRF905_TX_PAYLOAD_LEN			NRF905_RX_PAYLOAD_LEN
 
 int nRF905Initial(int nSPI_Channel, int nSPI_Speed, unsigned char unPower);
 int nRF905StartListen(const unsigned short int* pHoppingTable, int nTableLen);

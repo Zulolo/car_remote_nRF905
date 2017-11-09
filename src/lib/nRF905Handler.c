@@ -27,7 +27,7 @@ int32_t nRemoteCarControl(uint8_t* pData) {
 }
 
 int32_t nRemoteCarStartReceive(void) {
-	uint8_t unRF_Frame[32];
+	uint8_t unRF_Frame[NRF905_RX_PAYLOAD_LEN];
 
 //	printf("nClearSystemValue start.\n");
 	nClearSystemValue(REMOTE_CAR_SYS_INFO_RF_FRAME_ERR);
