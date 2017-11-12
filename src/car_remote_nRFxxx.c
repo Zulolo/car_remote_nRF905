@@ -8,14 +8,13 @@
  ============================================================================
  */
 
+#include <nRFxxxHandler.h>
 #include <unistd.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "wiringPi.h"
-#include "nRF905Handler.h"
-
 #include "system.h"
 
 PI_THREAD (nRF905Thread)
