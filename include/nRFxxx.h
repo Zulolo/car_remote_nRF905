@@ -11,8 +11,14 @@
 										syslog(LOG_USER | LOG_INFO, arg);\
 										closelog()
 
-#define NRFxxx_RX_PAYLOAD_LEN			16
-#define NRFxxx_TX_PAYLOAD_LEN			NRFxxx_RX_PAYLOAD_LEN
+#ifdef NRF905_AS_RF
+	#define NRFxxx_RX_PAYLOAD_LEN			16
+	#define NRFxxx_TX_PAYLOAD_LEN			NRFxxx_RX_PAYLOAD_LEN
+#elif NRF24L01P_AS_RF
+	#define NRFxxx_RX_PAYLOAD_LEN			32
+	#define NRFxxx_TX_PAYLOAD_LEN			NRFxxx_RX_PAYLOAD_LEN
+#endif
+
 
 int nRFxxxInitial(int nSPI_Channel, int nSPI_Speed, unsigned char unPower);
 int nRFxxxStartListen(const unsigned short int* pHoppingTable, int nTableLen);
