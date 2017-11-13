@@ -11,6 +11,8 @@
 										syslog(LOG_USER | LOG_INFO, arg);\
 										closelog()
 
+#define ARRAY_LENGTH(x)					(sizeof(x)/sizeof(x[0]))
+
 #ifdef NRF905_AS_RF
 	#define NRFxxx_RX_PAYLOAD_LEN			16
 	#define NRFxxx_TX_PAYLOAD_LEN			NRFxxx_RX_PAYLOAD_LEN
@@ -21,7 +23,7 @@
 
 
 int nRFxxxInitial(int nSPI_Channel, int nSPI_Speed, unsigned char unPower);
-int nRFxxxStartListen(const unsigned short int* pHoppingTable, int nTableLen);
+int nRFxxxStartListen(void);
 int nRFxxxReadFrame(unsigned char* pReadBuff, int nBuffLen);
 int nRFxxxSendFrame(unsigned char* pReadBuff, int nBuffLen);
 int readConfig(unsigned char unConfigAddr, unsigned char* pBuff, int nBuffLen);

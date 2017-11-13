@@ -84,12 +84,30 @@ typedef struct _nRFxxxPinLevelInMode {
 #ifdef NRF905_AS_RF
 static const nRFxxxPinLevelInMode_t unNRFxxxMODE_PIN_LEVEL[] = { { LOW, LOW, LOW },
 		{ HIGH, LOW, LOW }, { HIGH, HIGH, LOW }, { HIGH, HIGH, HIGH } };
+static const unsigned short unCAR_REMOTE_HOPPING_TAB[] = { 0x804C, 0x803A, 0x8046, 0x8032, 0x804A, 0x8035,
+		0x804B, 0x8037, 0x804F, 0x803E, 0x8047, 0x8038, 0x8044, 0x8034, 0x8043, 0x8034, 0x804B,
+		0x8039, 0x804D, 0x803A, 0x804E, 0x803C, 0x8032, 0x803F };
+// MSB of CH_NO will always be 0
+static const unsigned char NRFxxx_CR_DEFAULT[] = { 0x4C, 0x0C, // F=(422.4+(0x6C<<1)/10)*1; No retransmission; +6db; NOT reduce receive power
+		(NRFxxx_RX_ADDR_LEN << 4) | NRFxxx_TX_ADDR_LEN,	// 4 bytes RX & TX address;
+		NRFxxx_RX_PAYLOAD_LEN, NRFxxx_TX_PAYLOAD_LEN, // 16 bytes RX & TX package length;
+		0x00, 0x0C, 0x40, 0x08,	// RX address is the calculation result of CH_NO
+		0x58 };	// 16MHz crystal; enable CRC; CRC16
 #elif NRF24L01P_AS_RF
 static const nRFxxxPinLevelInMode_t unNRFxxxMODE_PIN_LEVEL[] = { { LOW },
 	{ LOW }, { HIGH }, { HIGH }};
 static const unsigned char unNRFxxxMODE_REG[] = {
 		0x3C, 0x3E, 0x3F, 0x3E
 };
+static const unsigned char unCAR_REMOTE_HOPPING_TAB[] = { 0x10, 0x20, 0x12, 0x30, 0x14, 0x40,
+		0x16, 0x50, 0x18, 0x22, 0x1A, 0x32, 0x1C, 0x34, 0x24, 0x36, 0x26,
+		0x38, 0x28, 0x3A, 0x2A, 0x3C, 0x42, 0x46 };
+// MSB of CH_NO will always be 0
+static const unsigned char NRFxxx_CR_DEFAULT[] = { 0x4C, 0x0C, // F=(422.4+(0x6C<<1)/10)*1; No retransmission; +6db; NOT reduce receive power
+		(NRFxxx_RX_ADDR_LEN << 4) | NRFxxx_TX_ADDR_LEN,	// 4 bytes RX & TX address;
+		NRFxxx_RX_PAYLOAD_LEN, NRFxxx_TX_PAYLOAD_LEN, // 16 bytes RX & TX package length;
+		0x00, 0x0C, 0x40, 0x08,	// RX address is the calculation result of CH_NO
+		0x58 };	// 16MHz crystal; enable CRC; CRC16
 #endif
 
 typedef struct _nRFxxxStatus {
@@ -104,17 +122,8 @@ typedef struct _nRFxxxStatus {
 
 static nRFxxxStatus_t tNRFxxxStatus = {0, 0, 0, 0, 0, NRFxxx_MODE_PWR_DOWN};
 
-// MSB of CH_NO will always be 0
-static const unsigned char NRFxxx_CR_DEFAULT[] = { 0x4C, 0x0C, // F=(422.4+(0x6C<<1)/10)*1; No retransmission; +6db; NOT reduce receive power
-		(NRFxxx_RX_ADDR_LEN << 4) | NRFxxx_TX_ADDR_LEN,	// 4 bytes RX & TX address;
-		NRFxxx_RX_PAYLOAD_LEN, NRFxxx_TX_PAYLOAD_LEN, // 16 bytes RX & TX package length;
-		0x00, 0x0C, 0x40, 0x08,	// RX address is the calculation result of CH_NO
-		0x58 };	// 16MHz crystal; enable CRC; CRC16
-
 static int nRFxxxSPI_CHN = 0;
 static int nRFxxxPipeFd[2];
-static const unsigned short int* pRoamingTable;
-static int nRoamingTableLen;
 static unsigned char unNRFxxxPower;
 
 static int setNRFxxxMode(nRFxxxMode_t tNRFxxxMode);
@@ -212,6 +221,7 @@ static int writeTxPayload(unsigned char* pBuff, int nBuffLen) {
 	return nRFxxxSPI_WR_CMD(NRFxxx_CMD_WTP, pBuff, nBuffLen);
 }
 
+#ifdef NRF905_AS_RF
 static int writeFastConfig(unsigned short int unPA_PLL_CHN) {
 	int nResult;
 	nRFxxxMode_t tPreMode;
@@ -221,15 +231,21 @@ static int writeFastConfig(unsigned short int unPA_PLL_CHN) {
 	setNRFxxxMode(tPreMode);
 	return nResult;
 }
+#elif NRF24L01P_AS_RF
+static int setNRF24L01PFreq(unsigned char unCHN) {
+	if ((unCHN & 0x80) != 0) {
+		NRFxxx_LOG_ERR("nRF24L01+ channel setting error.");
+		return (-1);
+	}
+	return writeConfig(5, &unCHN, 1);
+}
 
-#ifdef NRF24L01P_AS_RF
 static int setNRF24L01PModeInReg(nRFxxxMode_t tNRFxxxMode) {
 	if (tNRFxxxMode >= NRFxxx_MODE_MAX){
 		NRFxxx_LOG_ERR("nRFxxx Mode error.");
 		return (-1);
 	}
-	writeConfig(0, unNRFxxxMODE_REG + tNRFxxxMode, 1);
-	return 0;
+	return writeConfig(0, unNRFxxxMODE_REG + tNRFxxxMode, 1);
 }
 #endif
 
@@ -330,19 +346,22 @@ static unsigned int getRxAddrFromChnPwr(unsigned short int unNRFxxxCHN_PWR) {
 }
 
 #define GET_CHN_PWR_FAST_CONFIG(x, y) 		((x) | ((y) << 10))
-
 static void roamNRFxxx(void) {
 	static int nHoppingPoint = 0;
 	printf("Start hopping.\n");
 	setNRFxxxMode(NRFxxx_MODE_STD_BY);
 	piLock(NRFxxxSTATUS_LOCK);
-	tNRFxxxStatus.unNRFxxxCHN_PWR = GET_CHN_PWR_FAST_CONFIG(pRoamingTable[nHoppingPoint], unNRFxxxPower);
-	(nHoppingPoint < (nRoamingTableLen - 1)) ? (nHoppingPoint++):(nHoppingPoint = 0);
+	tNRFxxxStatus.unNRFxxxCHN_PWR = GET_CHN_PWR_FAST_CONFIG(unCAR_REMOTE_HOPPING_TAB[nHoppingPoint], unNRFxxxPower);
+	(nHoppingPoint < (ARRAY_LENGTH(unCAR_REMOTE_HOPPING_TAB) - 1)) ? (nHoppingPoint++):(nHoppingPoint = 0);
 	tNRFxxxStatus.unNRFxxxHoppingCNT++;
 	tNRFxxxStatus.unNRFxxxTxAddr = getTxAddrFromChnPwr(tNRFxxxStatus.unNRFxxxCHN_PWR);
 	tNRFxxxStatus.unNRFxxxRxAddr = getRxAddrFromChnPwr(tNRFxxxStatus.unNRFxxxCHN_PWR);
 	piUnlock(NRFxxxSTATUS_LOCK);
+#ifdef NRF905_AS_RF
 	writeFastConfig(tNRFxxxStatus.unNRFxxxCHN_PWR);
+#elif NRF24L01P_AS_RF
+
+#endif
 	writeTxAddr(tNRFxxxStatus.unNRFxxxTxAddr);
 	writeRxAddr(tNRFxxxStatus.unNRFxxxRxAddr);
 	setNRFxxxMode(NRFxxx_MODE_BURST_RX);
@@ -382,7 +401,7 @@ int nRFxxxInitial(int nSPI_Channel, int nSPI_Speed, unsigned char unPower) {
 	return 0;
 }
 
-int nRFxxxStartListen(const unsigned short int* pHoppingTable, int nTableLen) {
+int nRFxxxStartListen(void) {
 	// generate pip
 	if (nRFxxxPipeFd[0] != 0) {
 		close(nRFxxxPipeFd[0]);
@@ -394,8 +413,6 @@ int nRFxxxStartListen(const unsigned short int* pHoppingTable, int nTableLen) {
 		NRFxxx_LOG_ERR("nRFxxx pipe initial error.");
 		return (-1);
 	}
-	pRoamingTable = pHoppingTable;
-	nRoamingTableLen = nTableLen;
 
 	// For test only, fix channel, TX and RX address, no hopping
 //	writeTxAddr(TEST_NRFxxx_TX_ADDR);
