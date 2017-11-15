@@ -18,7 +18,12 @@
 #define NRFxxx_SPI_CHN						0
 #define NRFxxx_SPEED						8000000
 
-
+typedef struct _CarStatus {
+	int16_t nFrontSpeed;
+	int16_t nRearSpeed;
+	int16_t nSteer;
+} CarStatus_t;
+static CarStatus_t tRemoteCarStatus;
 
 int32_t nRemoteCarControl(uint8_t* pData) {
 	return 0;
@@ -29,12 +34,13 @@ int32_t nRemoteCarStartReceive(void) {
 
 //	printf("nClearSystemValue start.\n");
 	nClearSystemValue(REMOTE_CAR_SYS_INFO_RF_FRAME_ERR);
-//	printf("nRFxxxInitial start.\n");
+	printf("nRFxxxInitial start.\n");
 	if (nRFxxxInitial(NRFxxx_SPI_CHN, NRFxxx_SPEED, 3) != 0) {
 		REMOTE_CAR_LOG_ERR("Initial nRFxxx SPI for remote car error.");
 		nSetSystemValue(REMOTE_CAR_SYS_INFO_RF_STATUS, "RF init error");
 		return (-1);
 	}
+	nRFxxxSendFrame(&tRemoteCarStatus, sizeof(tRemoteCarStatus));
 	nRFxxxStartListen();
 	while (1) {
 		if (nRFxxxReadFrame(unRF_Frame, sizeof(unRF_Frame)) > 0) {
@@ -44,7 +50,7 @@ int32_t nRemoteCarStartReceive(void) {
 				REMOTE_CAR_LOG_ERR("Parse received data error.");
 				nIncrSystemValue(REMOTE_CAR_SYS_INFO_RF_FRAME_ERR);
 			} else {
-				nRFxxxSendFrame(unRF_Frame, sizeof(unRF_Frame));
+				nRFxxxSendFrame(&tRemoteCarStatus, sizeof(tRemoteCarStatus));
 			}
 		} else {
 			printf("Remote car receive data from nRFxxx error.\n");

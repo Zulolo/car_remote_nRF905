@@ -25,7 +25,7 @@
 int nRFxxxInitial(int nSPI_Channel, int nSPI_Speed, unsigned char unPower);
 int nRFxxxStartListen(void);
 int nRFxxxReadFrame(unsigned char* pReadBuff, int nBuffLen);
-int nRFxxxSendFrame(unsigned char* pReadBuff, int nBuffLen);
+int nRFxxxSendFrame(void* pReadBuff, int nBuffLen);
 int readConfig(unsigned char unConfigAddr, unsigned char* pBuff, int nBuffLen);
 unsigned int getNRFxxxStatusRecvFrameCNT(void);
 unsigned int getNRFxxxStatusSendFrameCNT(void);
