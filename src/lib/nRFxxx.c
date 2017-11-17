@@ -33,6 +33,7 @@
  *
  */
 #ifdef NRF905_AS_RF
+#define NRFxxx_DR_PIN_ISR_EDGE					INT_EDGE_RISING
 #define NRFxxx_TX_EN_PIN						0
 #define NRFxxx_TRX_CE_PIN						2
 #define NRFxxx_PWR_UP_PIN						3
@@ -51,6 +52,7 @@
 #define CH_MSK_IN_CC_REG						0x01FF
 #define NRFxxx_DR_IN_STATUS_REG(status)			((status) & (0x01 << 5))
 #elif NRF24L01P_AS_RF
+#define NRFxxx_DR_PIN_ISR_EDGE					INT_EDGE_FALLING
 #define NRFxxx_TRX_CE_PIN						2
 #define NRFxxx_DR_PIN							4
 #define NRFxxx_TX_ADDRESS_IN_CR					0x10
@@ -119,8 +121,8 @@ typedef struct _nRFxxxInitCR {
 	const unsigned char* pCRValues;
 	unsigned char unCRLen;
 }nRFxxxInitCR_t;
-static const unsigned char NRFxxx_CR_DEFAULT_0[] = {0x3F, 0x01, 0x01, 0x02,
-		0x24, 0x02, 0x0E, 0x70};
+static const unsigned char NRFxxx_CR_DEFAULT_0[] = {0x3F, 0x01, 0x01, 0x02};
+//		0x24, 0x02, 0x0E, 0x70};
 static const unsigned char NRFxxx_CR_DEFAULT_17[] = {0x20, 0x20, 0x20, 0x20,
 		0x20, 0x20};
 static const unsigned char NRFxxx_CR_DEFAULT_28[] = {0x01, 0x06};
@@ -155,23 +157,17 @@ static int setNRFxxxMode(nRFxxxMode_t tNRFxxxMode);
 // then after write SPI you don't know what to change back
 static int nRFxxxSPI_WR_CMD(unsigned char unCMD, const unsigned char *pData, int nDataLen) {
 	int nResult;
-#ifdef NRF905_AS_RF
 	nRFxxxMode_t tPreMode;
-#endif
 	unsigned char* pBuff;
 	if (nDataLen > 0) {
 		pBuff = malloc(nDataLen + 1);
 		if (pBuff) {
 			pBuff[0] = unCMD;
 			memcpy(pBuff + 1, pData, nDataLen);
-#ifdef NRF905_AS_RF
 			tPreMode = tNRFxxxStatus.tNRFxxxCurrentMode;
 			setNRFxxxMode(NRFxxx_MODE_STD_BY);
-#endif
 			nResult = wiringPiSPIDataRW(nRFxxxSPI_CHN, pBuff, nDataLen + 1);
-#ifdef NRF905_AS_RF
 			setNRFxxxMode(tPreMode);
-#endif
 			free(pBuff);
 //			printf("wiringPiSPIDataRW nResult: %d\n", nResult);
 			return nResult;
@@ -220,20 +216,15 @@ static int readRxPayload(unsigned char* pBuff, int nBuffLen) {
 
 int readConfig(unsigned char unConfigAddr, unsigned char* pBuff, int nBuffLen) {
 	int nResult;
-#ifdef NRF905_AS_RF
 	nRFxxxMode_t tPreMode;
-#endif
 	unsigned char unReadBuff[33];
+
 	if ((nBuffLen > 0) && (nBuffLen < sizeof(unReadBuff))) {
 		unReadBuff[0] = NRFxxx_CMD_RC(unConfigAddr);
-#ifdef NRF905_AS_RF
 		tPreMode = tNRFxxxStatus.tNRFxxxCurrentMode;
 		setNRFxxxMode(NRFxxx_MODE_STD_BY);
-#endif
 		nResult = wiringPiSPIDataRW(nRFxxxSPI_CHN, unReadBuff, nBuffLen + 1);
-#ifdef NRF905_AS_RF
 		setNRFxxxMode(tPreMode);
-#endif
 		memcpy(pBuff, unReadBuff + 1, nBuffLen);
 		return nResult;
 	} else {
@@ -312,12 +303,13 @@ static int setNRFxxxMode(nRFxxxMode_t tNRFxxxMode) {
 #ifdef NRF905_AS_RF
 	digitalWrite(NRFxxx_PWR_UP_PIN, unNRFxxxMODE_PIN_LEVEL[tNRFxxxMode].nPWR_UP_PIN);
 	digitalWrite(NRFxxx_TX_EN_PIN, unNRFxxxMODE_PIN_LEVEL[tNRFxxxMode].nTX_EN_PIN);
-	digitalWrite(NRFxxx_TRX_CE_PIN, unNRFxxxMODE_PIN_LEVEL[tNRFxxxMode].nTRX_CE_PIN);
-#elif NRF24L01P_AS_RF
-	printf("Set nRF24L01+ mode to %d.\n", tNRFxxxMode);
-	setNRF24L01PModeInReg(tNRFxxxMode);
-	digitalWrite(NRFxxx_TRX_CE_PIN, unNRFxxxMODE_PIN_LEVEL[tNRFxxxMode].nTRX_CE_PIN);
 #endif
+//	digitalWrite(NRFxxx_TRX_CE_PIN, unNRFxxxMODE_PIN_LEVEL[tNRFxxxMode].nTRX_CE_PIN);
+//#elif NRF24L01P_AS_RF
+//	printf("Set nRF24L01+ mode to %d.\n", tNRFxxxMode);
+//	setNRF24L01PModeInReg(tNRFxxxMode);
+//	digitalWrite(NRFxxx_TRX_CE_PIN, unNRFxxxMODE_PIN_LEVEL[tNRFxxxMode].nTRX_CE_PIN);
+//#endif
 	piLock(NRFxxxSTATUS_LOCK);
 	tNRFxxxStatus.tNRFxxxCurrentMode = tNRFxxxMode;
 	piUnlock(NRFxxxSTATUS_LOCK);
@@ -388,7 +380,7 @@ static void dataReadyHandler(void) {
 }
 
 static int regDR_Event(void) {
-	return wiringPiISR (NRFxxx_DR_PIN, INT_EDGE_RISING, &dataReadyHandler) ;
+	return wiringPiISR (NRFxxx_DR_PIN, NRFxxx_DR_PIN_ISR_EDGE, &dataReadyHandler) ;
 }
 
 static int nRFxxxCRInitial(int nRFxxxSPI_Fd) {
@@ -452,7 +444,7 @@ static void roamNRFxxx(void) {
 
 int nRFxxxInitial(int nSPI_Channel, int nSPI_Speed, unsigned char unPower) {
 	int nRFxxxSPI_Fd;
-	unsigned char unCRValue[10];
+	unsigned char unCRValue[4];
 
 	printf("nRFxxxInitial.\n");
 	wiringPiSetup();
@@ -480,10 +472,12 @@ int nRFxxxInitial(int nSPI_Channel, int nSPI_Speed, unsigned char unPower) {
 	nRFxxxCRInitial(nRFxxxSPI_Fd);
 	printf("readConfig.\n");
 	readConfig(0, unCRValue, sizeof(unCRValue));
-	printf("CR value read is: 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, "
-			"0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X\n",
-			unCRValue[0], unCRValue[1], unCRValue[2], unCRValue[3], unCRValue[4],
-			unCRValue[5], unCRValue[6], unCRValue[7], unCRValue[8], unCRValue[9]);
+	printf("CR value read is: 0x%02X, 0x%02X, 0x%02X, 0x%02X\n", unCRValue[0], unCRValue[1], unCRValue[2], unCRValue[3]);
+//	0x%02X, "
+//			"0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X\n",
+//			unCRValue[0], unCRValue[1], unCRValue[2], unCRValue[3], unCRValue[4],
+//			unCRValue[5], unCRValue[6], unCRValue[7], unCRValue[8], unCRValue[9]);
+	exit(0);
 	return 0;
 }
 

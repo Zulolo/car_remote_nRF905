@@ -16,7 +16,7 @@
 #define REMOTE_CAR_SYS_INFO_RF_FRAME_ERR	REMOTE_CAR_SYS_INFO "rf_err_cnt"
 
 #define NRFxxx_SPI_CHN						0
-#define NRFxxx_SPEED						8000000
+#define NRFxxx_SPEED						5000000
 
 typedef struct _CarStatus {
 	int16_t nFrontSpeed;
