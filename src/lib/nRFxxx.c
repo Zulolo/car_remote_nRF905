@@ -51,7 +51,7 @@
 #define NRFxxx_CMD_CC(unPwrChn)					((unPwrChn) | 0x8000)
 #define CH_MSK_IN_CC_REG						0x01FF
 #define NRFxxx_DR_IN_STATUS_REG(status)			((status) & (0x01 << 5))
-#elif NRF24L01P_AS_RF
+#else
 #define NRFxxx_DR_PIN_ISR_EDGE					INT_EDGE_FALLING
 #define NRFxxx_TRX_CE_PIN						2
 #define NRFxxx_DR_PIN							4
@@ -85,7 +85,7 @@ typedef struct _nRFxxxPinLevelInMode {
 	int nTRX_CE_PIN;
 	int nTX_EN_PIN;
 } nRFxxxPinLevelInMode_t;
-#elif NRF24L01P_AS_RF
+#else
 typedef struct _nRFxxxPinLevelInMode {
 	int nTRX_CE_PIN;
 } nRFxxxPinLevelInMode_t;
@@ -106,7 +106,7 @@ static const unsigned char NRFxxx_CR_DEFAULT[] = { 0x4C, 0x0C, // F=(422.4+(0x6C
 		NRFxxx_RX_PAYLOAD_LEN, NRFxxx_TX_PAYLOAD_LEN, // 16 bytes RX & TX package length;
 		0x00, 0x0C, 0x40, 0x08,	// RX address is the calculation result of CH_NO
 		0x58 };	// 16MHz crystal; enable CRC; CRC16
-#elif NRF24L01P_AS_RF
+#else
 static const nRFxxxPinLevelInMode_t unNRFxxxMODE_PIN_LEVEL[] = { { LOW },
 	{ LOW }, { HIGH }, { HIGH }};
 static const unsigned char unNRFxxxMODE_REG[] = {
@@ -117,18 +117,13 @@ static const unsigned char unCAR_REMOTE_HOPPING_TAB[] = { 0x10, 0x20, 0x12, 0x30
 		0x38, 0x28, 0x3A, 0x2A, 0x3C, 0x42, 0x46 };
 
 typedef struct _nRFxxxInitCR {
-	unsigned char unCRStartAddr;
-	const unsigned char* pCRValues;
-	unsigned char unCRLen;
+	unsigned char unCRAddress;
+	unsigned char unCRValues;
 }nRFxxxInitCR_t;
-static const unsigned char NRFxxx_CR_DEFAULT_0[] = {0x3F, 0x01, 0x01, 0x02};
-//		0x24, 0x02, 0x0E, 0x70};
-static const unsigned char NRFxxx_CR_DEFAULT_17[] = {0x20, 0x20, 0x20, 0x20,
-		0x20, 0x20};
-static const unsigned char NRFxxx_CR_DEFAULT_28[] = {0x01, 0x06};
-static const nRFxxxInitCR_t NRFxxx_CR_DEFAULT[] = { {0, NRFxxx_CR_DEFAULT_0, sizeof(NRFxxx_CR_DEFAULT_0)},
-		{17, NRFxxx_CR_DEFAULT_17, sizeof(NRFxxx_CR_DEFAULT_17)},
-		{28, NRFxxx_CR_DEFAULT_28, sizeof(NRFxxx_CR_DEFAULT_28)}};
+static const nRFxxxInitCR_t NRFxxx_CR_DEFAULT[] = {{0, 0x3F}, {1, 0x01},
+		{2, 0x01}, {3, 0x02}, {4, 0x24}, {5, 0x02}, {6, 0x0E}, {7, 0x70},
+		{17, 0x20}, {18, 0x20}, {19, 0x20}, {20, 0x20}, {21, 0x20},
+		{22, 0x20}, {28, 0x01}, {29, 0x06}};
 #endif
 
 typedef struct _nRFxxxStatus {
@@ -139,7 +134,7 @@ typedef struct _nRFxxxStatus {
 	unsigned int unNRFxxxRxAddr;
 #ifdef NRF905_AS_RF
 	unsigned short int unNRFxxxCHN_PWR;
-#elif NRF24L01P_AS_RF
+#else
 	unsigned char unNRFxxxCHN;
 #endif
 	nRFxxxMode_t tNRFxxxCurrentMode;
@@ -239,7 +234,7 @@ static int writeConfig(unsigned char unConfigAddr, const unsigned char* pBuff, i
 static int writeTxAddr(unsigned int unTxAddr) {
 #ifdef NRF905_AS_RF
 	return nRFxxxSPI_WR_CMD(NRFxxx_CMD_WTA, (unsigned char*)(&unTxAddr), 4);
-#elif NRF24L01P_AS_RF
+#else
 	return writeConfig(NRFxxx_TX_ADDRESS_IN_CR, (unsigned char*)(&unTxAddr), 4);
 #endif
 }
@@ -264,7 +259,7 @@ static int writeFastConfig(unsigned short int unPA_PLL_CHN) {
 	setNRFxxxMode(tPreMode);
 	return nResult;
 }
-#elif NRF24L01P_AS_RF
+#else
 //static int setNRF24L01PFreq(unsigned char unCHN) {
 //	if ((unCHN & 0x80) != 0) {
 //		NRFxxx_LOG_ERR("nRF24L01+ channel setting error.");
@@ -282,7 +277,8 @@ static int setNRF24L01PModeInReg(nRFxxxMode_t tNRFxxxMode) {
 }
 
 static int clearDRFlag(void) {
-	return writeConfig(NRFxxx_STATUS_ADDR_IN_CR, NRFxxx_CR_DEFAULT_0 + NRFxxx_STATUS_ADDR_IN_CR, 1);
+	return writeConfig(NRFxxx_CR_DEFAULT[NRFxxx_STATUS_ADDR_IN_CR].unCRAddress,
+			&(NRFxxx_CR_DEFAULT[NRFxxx_STATUS_ADDR_IN_CR].unCRValues), 1);
 }
 #endif
 
@@ -305,7 +301,7 @@ static int setNRFxxxMode(nRFxxxMode_t tNRFxxxMode) {
 	digitalWrite(NRFxxx_TX_EN_PIN, unNRFxxxMODE_PIN_LEVEL[tNRFxxxMode].nTX_EN_PIN);
 #endif
 //	digitalWrite(NRFxxx_TRX_CE_PIN, unNRFxxxMODE_PIN_LEVEL[tNRFxxxMode].nTRX_CE_PIN);
-//#elif NRF24L01P_AS_RF
+//#else
 //	printf("Set nRF24L01+ mode to %d.\n", tNRFxxxMode);
 //	setNRF24L01PModeInReg(tNRFxxxMode);
 //	digitalWrite(NRFxxx_TRX_CE_PIN, unNRFxxxMODE_PIN_LEVEL[tNRFxxxMode].nTRX_CE_PIN);
@@ -335,7 +331,7 @@ static void dataReadyHandler(void) {
 		piUnlock(NRFxxxSTATUS_LOCK);
 #ifdef NRF905_AS_RF
 		setNRFxxxMode(NRFxxx_MODE_STD_BY);
-#elif NRF24L01P_AS_RF
+#else
 		clearDRFlag();
 #endif
 //		printf("DR set during RX.\n");
@@ -367,7 +363,7 @@ static void dataReadyHandler(void) {
 //		printf("DR set during TX, switch to receive mode.\n");
 #ifdef NRF905_AS_RF
 		setNRFxxxMode(NRFxxx_MODE_BURST_RX);
-#elif NRF24L01P_AS_RF
+#else
 		clearDRFlag();
 #endif
 	} else {
@@ -386,13 +382,12 @@ static int regDR_Event(void) {
 static int nRFxxxCRInitial(int nRFxxxSPI_Fd) {
 #ifdef NRF905_AS_RF
 	return writeConfig(0, NRFxxx_CR_DEFAULT, sizeof(NRFxxx_CR_DEFAULT));
-#elif NRF24L01P_AS_RF
+#else
 	int i;
 	for (i = 0; i < ARRAY_LENGTH(NRFxxx_CR_DEFAULT); i++) {
-		printf("Write CR initial %u value.\n", NRFxxx_CR_DEFAULT[i].unCRLen);
-		if (writeConfig(NRFxxx_CR_DEFAULT[i].unCRStartAddr,
-				NRFxxx_CR_DEFAULT[i].pCRValues,
-				NRFxxx_CR_DEFAULT[i].unCRLen) < 0) {
+		printf("Write CR initial %u value.\n", NRFxxx_CR_DEFAULT[i].unCRValues);
+		if (writeConfig(NRFxxx_CR_DEFAULT[i].unCRAddress,
+				&(NRFxxx_CR_DEFAULT[i].unCRValues), 1) < 0) {
 			NRFxxx_LOG_ERR("Write initial control register to nRF24L01+ error.");
 			return (-1);
 		}
@@ -421,7 +416,7 @@ static void roamNRFxxx(void) {
 	tNRFxxxStatus.unNRFxxxCHN_PWR = GET_CHN_PWR_FAST_CONFIG(unCAR_REMOTE_HOPPING_TAB[nHoppingPoint], unNRFxxxPower);
 	tNRFxxxStatus.unNRFxxxTxAddr = getTxAddrFromChnPwr(tNRFxxxStatus.unNRFxxxCHN_PWR);
 	tNRFxxxStatus.unNRFxxxRxAddr = getRxAddrFromChnPwr(tNRFxxxStatus.unNRFxxxCHN_PWR);
-#elif NRF24L01P_AS_RF
+#else
 	tNRFxxxStatus.unNRFxxxCHN = unCAR_REMOTE_HOPPING_TAB[nHoppingPoint];
 	tNRFxxxStatus.unNRFxxxTxAddr = getTxAddrFromChnPwr(tNRFxxxStatus.unNRFxxxCHN);
 	tNRFxxxStatus.unNRFxxxRxAddr = getRxAddrFromChnPwr(tNRFxxxStatus.unNRFxxxCHN);
@@ -432,7 +427,7 @@ static void roamNRFxxx(void) {
 	piUnlock(NRFxxxSTATUS_LOCK);
 #ifdef NRF905_AS_RF
 	writeFastConfig(tNRFxxxStatus.unNRFxxxCHN_PWR);
-#elif NRF24L01P_AS_RF
+#else
 	writeConfig(NRFxxx_RF_CH_ADDR_IN_CR, &(tNRFxxxStatus.unNRFxxxCHN), sizeof(tNRFxxxStatus.unNRFxxxCHN));
 #endif
 	writeTxAddr(tNRFxxxStatus.unNRFxxxTxAddr);
@@ -444,7 +439,7 @@ static void roamNRFxxx(void) {
 
 int nRFxxxInitial(int nSPI_Channel, int nSPI_Speed, unsigned char unPower) {
 	int nRFxxxSPI_Fd;
-	unsigned char unCRValue[4];
+	unsigned char unCRValue[10];
 
 	printf("nRFxxxInitial.\n");
 	wiringPiSetup();
@@ -471,13 +466,19 @@ int nRFxxxInitial(int nSPI_Channel, int nSPI_Speed, unsigned char unPower) {
 	printf("nRFxxxCRInitial.\n");
 	nRFxxxCRInitial(nRFxxxSPI_Fd);
 	printf("readConfig.\n");
+#ifdef NRF905_AS_RF
 	readConfig(0, unCRValue, sizeof(unCRValue));
-	printf("CR value read is: 0x%02X, 0x%02X, 0x%02X, 0x%02X\n", unCRValue[0], unCRValue[1], unCRValue[2], unCRValue[3]);
-//	0x%02X, "
-//			"0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X\n",
-//			unCRValue[0], unCRValue[1], unCRValue[2], unCRValue[3], unCRValue[4],
-//			unCRValue[5], unCRValue[6], unCRValue[7], unCRValue[8], unCRValue[9]);
-	exit(0);
+#else
+	int i;
+	for (i = 0; i < sizeof(unCRValue); i++) {
+		readConfig(i, unCRValue + i, 1);
+	}
+#endif
+	printf("CR value read is: 0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X, "
+			"0x%02X, 0x%02X, 0x%02X, 0x%02X, 0x%02X\n",
+			unCRValue[0], unCRValue[1], unCRValue[2], unCRValue[3], unCRValue[4],
+			unCRValue[5], unCRValue[6], unCRValue[7], unCRValue[8], unCRValue[9]);
+
 	return 0;
 }
 
@@ -538,7 +539,7 @@ int nRFxxxSendFrame(void* pReadBuff, int nBuffLen) {
 	writeTxPayload(pReadBuff, nBuffLen);
 //	printf("setNRFxxxMode to TX \n");
 	setNRFxxxMode(NRFxxx_MODE_BURST_TX);
-#elif NRF24L01P_AS_RF
+#else
 	nRFxxxSPI_WR_CMD(NRFxxx_CMD_WAP, pReadBuff, nBuffLen);
 #endif
 
