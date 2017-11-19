@@ -11,7 +11,7 @@
 										syslog(LOG_USER | LOG_INFO, arg);\
 										closelog()
 
-#define ARRAY_LENGTH(x)					(sizeof(x)/sizeof(x[0]))
+#define GET_LENGTH_OF_ARRAY(x)			(sizeof(x)/sizeof(x[0]))
 
 #ifdef NRF905_AS_RF
 	#define NRFxxx_RX_PAYLOAD_LEN			16
