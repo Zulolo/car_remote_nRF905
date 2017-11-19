@@ -16,7 +16,7 @@
 #define REMOTE_CAR_SYS_INFO_RF_FRAME_ERR	REMOTE_CAR_SYS_INFO "rf_err_cnt"
 
 #define NRFxxx_SPI_CHN						0
-#define NRFxxx_SPEED						5000000
+#define NRFxxx_SPEED						8000000
 
 typedef struct _CarStatus {
 	int16_t nFrontSpeed;
@@ -40,7 +40,10 @@ int32_t nRemoteCarStartReceive(void) {
 		nSetSystemValue(REMOTE_CAR_SYS_INFO_RF_STATUS, "RF init error");
 		return (-1);
 	}
+#ifdef NRF24L01P_AS_RF
+	// Prepare for next ACK
 	nRFxxxSendFrame(&tRemoteCarStatus, sizeof(tRemoteCarStatus));
+#endif
 	nRFxxxStartListen();
 	while (1) {
 		if (nRFxxxReadFrame(unRF_Frame, sizeof(unRF_Frame)) > 0) {
