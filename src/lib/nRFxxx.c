@@ -119,7 +119,7 @@ typedef struct _nRFxxxInitCR {
 	unsigned char unCRValues;
 }nRFxxxInitCR_t;
 static const nRFxxxInitCR_t NRFxxx_CR_DEFAULT[] = {{0, 0x3F}, {1, 0x01},
-		{2, 0x01}, {3, 0x02}, {4, 0x24}, {5, 0x02}, {6, 0x0E}, {7, 0x70},
+		{2, 0x01}, {3, 0x02}, {4, 0x24}, {5, 0x02}, {6, 0x0F}, {7, 0x70},
 		{17, 0x20}, {18, 0x20}, {19, 0x20}, {20, 0x20}, {21, 0x20},
 		{22, 0x20}, {28, 0x01}, {29, 0x06}};
 #endif
@@ -231,14 +231,18 @@ static int writeConfig(unsigned char unConfigAddr, const unsigned char* pBuff, i
 
 static int writeTxAddr(unsigned int unTxAddr) {
 #ifdef NRF905_AS_RF
-	return nRFxxxSPI_WR_CMD(NRFxxx_CMD_WTA, (unsigned char*)(&unTxAddr), 4);
+	return nRFxxxSPI_WR_CMD(NRFxxx_CMD_WTA, (unsigned char*)(&unTxAddr), sizeof(unTxAddr));
 #else
-	return writeConfig(NRFxxx_TX_ADDRESS_IN_CR, (unsigned char*)(&unTxAddr), 4);
+	return writeConfig(NRFxxx_TX_ADDRESS_IN_CR, (unsigned char*)(&unTxAddr), sizeof(unTxAddr));
 #endif
 }
 
 static int writeRxAddr(unsigned int unRxAddr) {
-	return writeConfig(NRFxxx_RX_ADDRESS_IN_CR, (unsigned char*)(&unRxAddr), 4);
+#ifdef NRF905_AS_RF
+	return writeConfig(NRFxxx_RX_ADDRESS_IN_CR, (unsigned char*)(&unRxAddr), sizeof(unRxAddr));
+#else
+	return writeConfig(NRFxxx_RX_ADDRESS_IN_CR, (unsigned char*)(&unRxAddr), sizeof(unRxAddr));
+#endif
 }
 
 #ifdef NRF905_AS_RF
@@ -333,7 +337,7 @@ static void dataReadyHandler(void) {
 #else
 		clearDRFlag();
 #endif
-//		printf("DR set during RX.\n");
+		printf("DR set during RX.\n");
 		// make sure DR was set
 		nStatusReg = readStatusReg();
 		if ((nStatusReg >= 0) && (NRFxxx_DR_IN_STATUS_REG(nStatusReg) == 0)) {
@@ -359,7 +363,7 @@ static void dataReadyHandler(void) {
 //		setNRFxxxMode(NRFxxx_MODE_BURST_RX);
 	} else if (NRFxxx_MODE_BURST_TX == tNRFxxxStatus.tNRFxxxCurrentMode) {
 		piUnlock(NRFxxxSTATUS_LOCK);
-//		printf("DR set during TX, switch to receive mode.\n");
+		printf("DR set during TX, switch to receive mode.\n");
 #ifdef NRF905_AS_RF
 		setNRFxxxMode(NRFxxx_MODE_BURST_RX);
 #else
@@ -429,8 +433,8 @@ static void roamNRFxxx(void) {
 #else
 	writeConfig(NRFxxx_RF_CH_ADDR_IN_CR, &(tNRFxxxStatus.unNRFxxxCHN), sizeof(tNRFxxxStatus.unNRFxxxCHN));
 #endif
-	writeTxAddr(tNRFxxxStatus.unNRFxxxTxAddr);
-	writeRxAddr(tNRFxxxStatus.unNRFxxxRxAddr);
+	writeTxAddr(0x12345678);	//(tNRFxxxStatus.unNRFxxxTxAddr);
+	writeRxAddr(0x12345678);	//(tNRFxxxStatus.unNRFxxxRxAddr);
 #ifdef NRF905_AS_RF
 	setNRFxxxMode(NRFxxx_MODE_BURST_RX);
 #endif
