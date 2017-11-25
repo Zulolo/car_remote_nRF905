@@ -118,10 +118,12 @@ typedef struct _nRFxxxInitCR {
 	unsigned char unCRAddress;
 	unsigned char unCRValues;
 }nRFxxxInitCR_t;
-static const nRFxxxInitCR_t NRFxxx_CR_DEFAULT[] = {{0, 0x3F}, {1, 0x01},
-		{2, 0x01}, {3, 0x02}, {4, 0x24}, {5, 0x02}, {6, 0x0F}, {7, 0x70},
-		{17, 0x20}, {18, 0x20}, {19, 0x20}, {20, 0x20}, {21, 0x20},
-		{22, 0x20}, {28, 0x01}, {29, 0x06}};
+static const nRFxxxInitCR_t NRFxxx_CR_DEFAULT[] = {{1, 0x01},
+		{2, 0x01}, {5, 40}, {17, 32}, {6, 0x0F}, {0, 0x3F}};
+//static const nRFxxxInitCR_t NRFxxx_CR_DEFAULT[] = {{0, 0x3F}, {1, 0x01},
+//		{2, 0x01}, {3, 0x02}, {4, 0x24}, {5, 40}, {6, 0x0F}, {7, 0x70},
+//		{17, 0x20}, {18, 0x20}, {19, 0x20}, {20, 0x20}, {21, 0x20},
+//		{22, 0x20}, {28, 0x01}, {29, 0x06}};
 #endif
 
 typedef struct _nRFxxxStatus {
@@ -280,8 +282,8 @@ static int writeFastConfig(unsigned short int unPA_PLL_CHN) {
 //}
 
 static int clearDRFlag(void) {
-	return writeConfig(NRFxxx_CR_DEFAULT[NRFxxx_STATUS_ADDR_IN_CR].unCRAddress,
-			&(NRFxxx_CR_DEFAULT[NRFxxx_STATUS_ADDR_IN_CR].unCRValues), 1);
+	static const unsigned char unClearDRFlag = 0x70;
+	return writeConfig(NRFxxx_STATUS_ADDR_IN_CR, &unClearDRFlag, 1);
 }
 #endif
 
@@ -317,18 +319,20 @@ static int setNRFxxxMode(nRFxxxMode_t tNRFxxxMode) {
 }
 
 static int setChannelMonitorTimer(int nSeconds) {
-	struct itimerval tChannelMonitorTimer;  /* for setting itimer */
-	tChannelMonitorTimer.it_value.tv_sec = nSeconds;
-	tChannelMonitorTimer.it_value.tv_usec = 0;
-	tChannelMonitorTimer.it_interval.tv_sec = nSeconds;
-	tChannelMonitorTimer.it_interval.tv_usec = 0;
-	return setitimer(ITIMER_REAL, &tChannelMonitorTimer, NULL);
+	return 0;
+//	struct itimerval tChannelMonitorTimer;  /* for setting itimer */
+//	tChannelMonitorTimer.it_value.tv_sec = nSeconds;
+//	tChannelMonitorTimer.it_value.tv_usec = 0;
+//	tChannelMonitorTimer.it_interval.tv_sec = nSeconds;
+//	tChannelMonitorTimer.it_interval.tv_usec = 0;
+//	return setitimer(ITIMER_REAL, &tChannelMonitorTimer, NULL);
 }
 
 static void dataReadyHandler(void) {
 	static unsigned char unReadBuff[NRFxxx_RX_PAYLOAD_LEN];
 	static int nStatusReg;
-
+	nStatusReg = readStatusReg();
+	printf("DR set: %d!\n", nStatusReg);
 	piLock(NRFxxxSTATUS_LOCK);
 	if (NRFxxx_MODE_BURST_RX == tNRFxxxStatus.tNRFxxxCurrentMode) {
 		piUnlock(NRFxxxSTATUS_LOCK);
@@ -387,6 +391,8 @@ static int nRFxxxCRInitial(int nRFxxxSPI_Fd) {
 	return writeConfig(0, NRFxxx_CR_DEFAULT, sizeof(NRFxxx_CR_DEFAULT));
 #else
 	int i;
+	writeTxAddr(0x12345678);
+	writeRxAddr(0x12345678);
 	for (i = 0; i < GET_LENGTH_OF_ARRAY(NRFxxx_CR_DEFAULT); i++) {
 		printf("Write CR initial %u value.\n", NRFxxx_CR_DEFAULT[i].unCRValues);
 		if (writeConfig(NRFxxx_CR_DEFAULT[i].unCRAddress,
@@ -433,8 +439,8 @@ static void roamNRFxxx(void) {
 #else
 	writeConfig(NRFxxx_RF_CH_ADDR_IN_CR, &(tNRFxxxStatus.unNRFxxxCHN), sizeof(tNRFxxxStatus.unNRFxxxCHN));
 #endif
-	writeTxAddr(0x12345678);	//(tNRFxxxStatus.unNRFxxxTxAddr);
-	writeRxAddr(0x12345678);	//(tNRFxxxStatus.unNRFxxxRxAddr);
+	writeTxAddr(tNRFxxxStatus.unNRFxxxTxAddr);
+	writeRxAddr(tNRFxxxStatus.unNRFxxxRxAddr);
 #ifdef NRF905_AS_RF
 	setNRFxxxMode(NRFxxx_MODE_BURST_RX);
 #endif
@@ -507,15 +513,15 @@ int nRFxxxStartListen(void) {
 	// register ISR to handle data receive when DR rise edge
 	regDR_Event();
 
-	printf("Start registering SIGALM.\n");
-	// start timer to watch communication, if do RX during 1s, start hopping
-	if (signal(SIGALRM, (void (*)(int)) roamNRFxxx) == SIG_ERR) {
-		NRFxxx_LOG_ERR("Unable to catch SIGALRM");
-		close(nRFxxxPipeFd[0]);
-		close(nRFxxxPipeFd[1]);
-		return (-1);
-	}
-	raise(SIGALRM);
+//	printf("Start registering SIGALM.\n");
+//	// start timer to watch communication, if do RX during 1s, start hopping
+//	if (signal(SIGALRM, (void (*)(int)) roamNRFxxx) == SIG_ERR) {
+//		NRFxxx_LOG_ERR("Unable to catch SIGALRM");
+//		close(nRFxxxPipeFd[0]);
+//		close(nRFxxxPipeFd[1]);
+//		return (-1);
+//	}
+//	raise(SIGALRM);
 
 	if (setChannelMonitorTimer(1) != 0) {
 		NRFxxx_LOG_ERR("error calling setitimer()");
