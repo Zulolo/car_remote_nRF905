@@ -66,6 +66,8 @@
 #define NRFxxx_CMD_WTP							0xA0
 #define NRFxxx_CMD_WAP							0xA8
 #define NRFxxx_CMD_RRP							0x61
+#define NRFxxx_CMD_FLUSH_RX_FIFO				0xE2	// flush RX FIFO
+#define NRFxxx_CMD_FLUSH_TX_FIFO				0xE1	// flush TX FIFO
 #define NRFxxx_DR_IN_STATUS_REG(status)			((status) & (0x01 << 6))
 #endif
 
@@ -154,11 +156,19 @@ static int nRFxxxSPI_WR_CMD(unsigned char unCMD, const unsigned char *pData, int
 	int nResult;
 	nRFxxxMode_t tPreMode;
 	unsigned char* pBuff;
-	if (nDataLen > 0) {
+	if (nDataLen >= 0) {
 		pBuff = malloc(nDataLen + 1);
 		if (pBuff) {
 			pBuff[0] = unCMD;
-			memcpy(pBuff + 1, pData, nDataLen);
+			if (nDataLen > 0) {
+				if (pData == NULL) {
+					free(pBuff);
+					NRFxxx_LOG_ERR("Payload length not zero but no where to copy.");
+					return (-1);
+				} else {
+					memcpy(pBuff + 1, pData, nDataLen);
+				}
+			}
 			tPreMode = tNRFxxxStatus.tNRFxxxCurrentMode;
 			setNRFxxxMode(NRFxxx_MODE_STD_BY);
 			nResult = wiringPiSPIDataRW(nRFxxxSPI_CHN, pBuff, nDataLen + 1);
@@ -171,7 +181,7 @@ static int nRFxxxSPI_WR_CMD(unsigned char unCMD, const unsigned char *pData, int
 			return (-1);
 		}
 	} else {
-		NRFxxx_LOG_ERR("SPI write data length empty.");
+		NRFxxx_LOG_ERR("SPI write data length error.");
 		return (-1);
 	}
 }
@@ -185,9 +195,10 @@ static int readStatusReg(void) {
 	setNRFxxxMode(NRFxxx_MODE_STD_BY);
 	nResult = wiringPiSPIDataRW(nRFxxxSPI_CHN, &unStatus, 1);
 	setNRFxxxMode(tPreMode);
-	if (0 == nResult) {
+	if (0 < nResult) {
 		return unStatus;
 	} else {
+		NRFxxx_LOG_ERR("wiringPiSPIDataRW error in readStatusReg with code: %d.", nResult);
 		return (-1);
 	}
 }
@@ -331,14 +342,16 @@ static int setChannelMonitorTimer(int nSeconds) {
 static void dataReadyHandler(void) {
 	static unsigned char unReadBuff[NRFxxx_RX_PAYLOAD_LEN];
 	static int nStatusReg;
-	nStatusReg = readStatusReg();
-	printf("DR set: %d!\n", nStatusReg);
+//	nStatusReg = readStatusReg();
+//	printf("DR set: %d!\n", nStatusReg);
 	piLock(NRFxxxSTATUS_LOCK);
 	if (NRFxxx_MODE_BURST_RX == tNRFxxxStatus.tNRFxxxCurrentMode) {
 		piUnlock(NRFxxxSTATUS_LOCK);
 #ifdef NRF905_AS_RF
 		setNRFxxxMode(NRFxxx_MODE_STD_BY);
-#else
+#endif
+#ifdef NRF24L01P_AS_RF
+		nRFxxxSPI_WR_CMD(NRFxxx_CMD_FLUSH_RX_FIFO, NULL, 0);
 		clearDRFlag();
 #endif
 		printf("DR set during RX.\n");
@@ -370,13 +383,16 @@ static void dataReadyHandler(void) {
 		printf("DR set during TX, switch to receive mode.\n");
 #ifdef NRF905_AS_RF
 		setNRFxxxMode(NRFxxx_MODE_BURST_RX);
-#else
+#endif
+#ifdef NRF24L01P_AS_RF
+		nRFxxxSPI_WR_CMD(NRFxxx_CMD_FLUSH_RX_FIFO, NULL, 0);
 		clearDRFlag();
 #endif
 	} else {
 		piUnlock(NRFxxxSTATUS_LOCK);
 		NRFxxx_LOG_ERR("Data ready pin was set but status is neither TX nor RX.");
 #ifdef NRF24L01P_AS_RF
+		nRFxxxSPI_WR_CMD(NRFxxx_CMD_FLUSH_RX_FIFO, NULL, 0);
 		clearDRFlag();
 #endif
 	}
@@ -472,6 +488,9 @@ int nRFxxxInitial(int nSPI_Channel, int nSPI_Speed, unsigned char unPower) {
 	setNRFxxxMode(NRFxxx_MODE_STD_BY);
 	usleep(3000);
 
+#ifdef NRF24L01P_AS_RF
+	nRFxxxSPI_WR_CMD(NRFxxx_CMD_FLUSH_RX_FIFO, NULL, 0);
+#endif
 	printf("nRFxxxCRInitial.\n");
 	nRFxxxCRInitial(nRFxxxSPI_Fd);
 	printf("readConfig.\n");
