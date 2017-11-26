@@ -66,6 +66,7 @@
 #define NRFxxx_CMD_WTP							0xA0
 #define NRFxxx_CMD_WAP							0xA8
 #define NRFxxx_CMD_RRP							0x61
+#define NRFxxx_CMD_RRPW							0x60
 #define NRFxxx_CMD_FLUSH_RX_FIFO				0xE2	// flush RX FIFO
 #define NRFxxx_CMD_FLUSH_TX_FIFO				0xE1	// flush TX FIFO
 #define NRFxxx_DR_IN_STATUS_REG(status)			((status) & (0x01 << 6))
@@ -120,12 +121,11 @@ typedef struct _nRFxxxInitCR {
 	unsigned char unCRAddress;
 	unsigned char unCRValues;
 }nRFxxxInitCR_t;
-static const nRFxxxInitCR_t NRFxxx_CR_DEFAULT[] = {{1, 0x01},
-		{2, 0x01}, {5, 40}, {17, 32}, {6, 0x0F}, {0, 0x3F}};
-//static const nRFxxxInitCR_t NRFxxx_CR_DEFAULT[] = {{0, 0x3F}, {1, 0x01},
-//		{2, 0x01}, {3, 0x02}, {4, 0x24}, {5, 40}, {6, 0x0F}, {7, 0x70},
-//		{17, 0x20}, {18, 0x20}, {19, 0x20}, {20, 0x20}, {21, 0x20},
-//		{22, 0x20}, {28, 0x01}, {29, 0x06}};
+//static const nRFxxxInitCR_t NRFxxx_CR_DEFAULT[] = {{1, 0x01},
+//		{2, 0x01}, {5, 40}, {17, 32}, {6, 0x0F}, {0, 0x3F}};
+static const nRFxxxInitCR_t NRFxxx_CR_DEFAULT[] = {{0, 0x3F}, {1, 0x01},
+		{2, 0x01}, {3, 0x02}, {4, 0x14}, {5, 40}, {6, 0x0F}, {7, 0x70},
+		{28, 0x01}, {29, 0x06}};
 #endif
 
 typedef struct _nRFxxxStatus {
@@ -258,46 +258,6 @@ static int writeRxAddr(unsigned int unRxAddr) {
 #endif
 }
 
-#ifdef NRF905_AS_RF
-// TX and RX address are already configured during hopping
-// No need for nRF24L01+ because it will never send out frame initiatively
-// nRF24L01+ only response received package in ACK
-static int writeTxPayload(unsigned char* pBuff, int nBuffLen) {
-//	printf("writeTxPayload\n");
-	return nRFxxxSPI_WR_CMD(NRFxxx_CMD_WTP, pBuff, nBuffLen);
-}
-static int writeFastConfig(unsigned short int unPA_PLL_CHN) {
-	int nResult;
-	nRFxxxMode_t tPreMode;
-	tPreMode = tNRFxxxStatus.tNRFxxxCurrentMode;
-	setNRFxxxMode(NRFxxx_MODE_STD_BY);
-	nResult = wiringPiSPIDataRW(nRFxxxSPI_CHN, (unsigned char *)(&unPA_PLL_CHN), 2);
-	setNRFxxxMode(tPreMode);
-	return nResult;
-}
-#else
-//static int setNRF24L01PFreq(unsigned char unCHN) {
-//	if ((unCHN & 0x80) != 0) {
-//		NRFxxx_LOG_ERR("nRF24L01+ channel setting error.");
-//		return (-1);
-//	}
-//	return writeConfig(5, &unCHN, 1);
-//}
-
-//static int setNRF24L01PModeInReg(nRFxxxMode_t tNRFxxxMode) {
-//	if (tNRFxxxMode >= NRFxxx_MODE_MAX){
-//		NRFxxx_LOG_ERR("nRFxxx Mode error.");
-//		return (-1);
-//	}
-//	return writeConfig(0, unNRFxxxMODE_REG + tNRFxxxMode, 1);
-//}
-
-static int clearDRFlag(void) {
-	static const unsigned char unClearDRFlag = 0x70;
-	return writeConfig(NRFxxx_STATUS_ADDR_IN_CR, &unClearDRFlag, 1);
-}
-#endif
-
 static int setNRFxxxMode(nRFxxxMode_t tNRFxxxMode) {
 	if (tNRFxxxMode >= NRFxxx_MODE_MAX){
 		NRFxxx_LOG_ERR("nRFxxx Mode error.");
@@ -339,9 +299,89 @@ static int setChannelMonitorTimer(int nSeconds) {
 //	return setitimer(ITIMER_REAL, &tChannelMonitorTimer, NULL);
 }
 
+#ifdef NRF905_AS_RF
+// TX and RX address are already configured during hopping
+// No need for nRF24L01+ because it will never send out frame initiatively
+// nRF24L01+ only response received package in ACK
+static int writeTxPayload(unsigned char* pBuff, int nBuffLen) {
+//	printf("writeTxPayload\n");
+	return nRFxxxSPI_WR_CMD(NRFxxx_CMD_WTP, pBuff, nBuffLen);
+}
+static int writeFastConfig(unsigned short int unPA_PLL_CHN) {
+	int nResult;
+	nRFxxxMode_t tPreMode;
+	tPreMode = tNRFxxxStatus.tNRFxxxCurrentMode;
+	setNRFxxxMode(NRFxxx_MODE_STD_BY);
+	nResult = wiringPiSPIDataRW(nRFxxxSPI_CHN, (unsigned char *)(&unPA_PLL_CHN), 2);
+	setNRFxxxMode(tPreMode);
+	return nResult;
+}
+
 static void dataReadyHandler(void) {
 	static unsigned char unReadBuff[NRFxxx_RX_PAYLOAD_LEN];
 	static int nStatusReg;
+	static int nRxPayloadWidth;
+
+	piLock(NRFxxxSTATUS_LOCK);
+	if (NRFxxx_MODE_BURST_RX == tNRFxxxStatus.tNRFxxxCurrentMode) {
+		piUnlock(NRFxxxSTATUS_LOCK);
+		setNRFxxxMode(NRFxxx_MODE_STD_BY);
+		// make sure DR was set
+		nStatusReg = readStatusReg();
+		if ((nStatusReg >= 0) && (NRFxxx_DR_IN_STATUS_REG(nStatusReg) == 0)) {
+			// Strange happens, do something?
+			NRFxxx_LOG_ERR("Strange happens. DR pin set but status register not.");
+		} else {
+			// reset monitor timer since communication seems OK
+			setChannelMonitorTimer(1);
+			piLock(NRFxxxSTATUS_LOCK);
+			tNRFxxxStatus.unNRFxxxRecvFrameCNT++;
+			piUnlock(NRFxxxSTATUS_LOCK);
+			readRxPayload(unReadBuff, sizeof(unReadBuff));
+			if (write(nRFxxxPipeFd[1], unReadBuff, sizeof(unReadBuff)) != sizeof(unReadBuff)) {
+				NRFxxx_LOG_ERR("Write nRFxxx pipe error");
+			}
+		}
+		// Response shall be sent before continue receiving
+		// For nRF905 after receiving some message, manually response will be sent,
+		// After manually response message sent out, nRF905 will be put in RX mode
+		// For nRF24F01+, this is done by auto acknowledge
+	} else if (NRFxxx_MODE_BURST_TX == tNRFxxxStatus.tNRFxxxCurrentMode) {
+		piUnlock(NRFxxxSTATUS_LOCK);
+		NRFxxx_LOG_ERR("DR set during TX, switch to receive mode.\n");
+		setNRFxxxMode(NRFxxx_MODE_BURST_RX);
+	} else {
+		piUnlock(NRFxxxSTATUS_LOCK);
+		NRFxxx_LOG_ERR("Data ready pin was set but status is neither TX nor RX.");
+		setNRFxxxMode(NRFxxx_MODE_BURST_RX);
+	}
+}
+#else
+static int readRxPayloadWidth(void) {
+	unsigned char unReadBuff[2];
+	nRFxxxMode_t tPreMode;
+
+	unReadBuff[0] = NRFxxx_CMD_RRPW;
+	tPreMode = tNRFxxxStatus.tNRFxxxCurrentMode;
+	setNRFxxxMode(NRFxxx_MODE_STD_BY);
+	if (wiringPiSPIDataRW(nRFxxxSPI_CHN, unReadBuff, sizeof(unReadBuff)) > 0) {
+		setNRFxxxMode(tPreMode);
+		return unReadBuff[1];
+	} else {
+		setNRFxxxMode(tPreMode);
+		return (-1);
+	}
+}
+
+static int clearDRFlag(void) {
+	static const unsigned char unClearDRFlag = 0x70;
+	return writeConfig(NRFxxx_STATUS_ADDR_IN_CR, &unClearDRFlag, 1);
+}
+
+static void dataReadyHandler(void) {
+	static unsigned char unReadBuff[NRFxxx_RX_PAYLOAD_LEN];
+	static int nStatusReg;
+	static int nRxPayloadWidth;
 //	nStatusReg = readStatusReg();
 //	printf("DR set: %d!\n", nStatusReg);
 	piLock(NRFxxxSTATUS_LOCK);
@@ -357,50 +397,41 @@ static void dataReadyHandler(void) {
 		} else {
 //			printf("Data ready rising edge detected.\n");
 			// reset monitor timer since communication seems OK
-			setChannelMonitorTimer(1);
-			piLock(NRFxxxSTATUS_LOCK);
-			tNRFxxxStatus.unNRFxxxRecvFrameCNT++;
-			piUnlock(NRFxxxSTATUS_LOCK);
-//			printf("Read RX payload.\n");
-			readRxPayload(unReadBuff, sizeof(unReadBuff));
-#ifdef NRF24L01P_AS_RF
-			nRFxxxSPI_WR_CMD(NRFxxx_CMD_FLUSH_TX_FIFO, NULL, 0);
-#endif
-			printf("New frame received: 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X.\n",
-					unReadBuff[0], unReadBuff[1], unReadBuff[2], unReadBuff[3], unReadBuff[4]);
-//			printf("Write payload to pipe.\n");
+			nRxPayloadWidth = readRxPayloadWidth();
+			if ((nRxPayloadWidth > 0) && (nRxPayloadWidth <= 32)) {
+				setChannelMonitorTimer(1);
+				piLock(NRFxxxSTATUS_LOCK);
+				tNRFxxxStatus.unNRFxxxRecvFrameCNT++;
+				piUnlock(NRFxxxSTATUS_LOCK);
+	//			printf("Read RX payload.\n");
+				readRxPayload(unReadBuff, sizeof(unReadBuff));
 
-//			if (write(nRFxxxPipeFd[1], unReadBuff, sizeof(unReadBuff)) != sizeof(unReadBuff)) {
-//				NRFxxx_LOG_ERR("Write nRFxxx pipe error");
-//			}
+				printf("New frame received: 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X.\n",
+						unReadBuff[0], unReadBuff[1], unReadBuff[2], unReadBuff[3], unReadBuff[4]);
+
+				if (write(nRFxxxPipeFd[1], unReadBuff, sizeof(unReadBuff)) != sizeof(unReadBuff)) {
+					NRFxxx_LOG_ERR("Write nRFxxx pipe error");
+				}
+			} else {
+				NRFxxx_LOG_ERR("RX payload width error!");
+			}
 		}
-		// Response shall be sent before continue receiving
-		// For nRF905 after receiving some message, manually response will be sent,
-		// After manually response message sent out, nRF905 will be put in RX mode
-		// For nRF24F01+, this is done by auto acknowledge
-#ifdef NRF24L01P_AS_RF
-		nRFxxxSPI_WR_CMD(NRFxxx_CMD_FLUSH_RX_FIFO, NULL, 0);
-		clearDRFlag();
-		setNRFxxxMode(NRFxxx_MODE_BURST_RX);
-#endif
 	} else if (NRFxxx_MODE_BURST_TX == tNRFxxxStatus.tNRFxxxCurrentMode) {
 		piUnlock(NRFxxxSTATUS_LOCK);
-		printf("DR set during TX, switch to receive mode.\n");
-#ifdef NRF24L01P_AS_RF
-		nRFxxxSPI_WR_CMD(NRFxxx_CMD_FLUSH_RX_FIFO, NULL, 0);
-		clearDRFlag();
-#endif
-		setNRFxxxMode(NRFxxx_MODE_BURST_RX);
+		NRFxxx_LOG_ERR("DR set during TX, switch to receive mode.\n");
 	} else {
 		piUnlock(NRFxxxSTATUS_LOCK);
 		NRFxxx_LOG_ERR("Data ready pin was set but status is neither TX nor RX.");
-#ifdef NRF24L01P_AS_RF
-		nRFxxxSPI_WR_CMD(NRFxxx_CMD_FLUSH_RX_FIFO, NULL, 0);
-		clearDRFlag();
-#endif
-		setNRFxxxMode(NRFxxx_MODE_BURST_RX);
 	}
+	nRFxxxSPI_WR_CMD(NRFxxx_CMD_FLUSH_RX_FIFO, NULL, 0);
+	clearDRFlag();
+	// Response shall be sent before continue receiving
+	// For nRF905 after receiving some message, manually response will be sent,
+	// After manually response message sent out, nRF905 will be put in RX mode
+	// For nRF24F01+, this is done by auto acknowledge
+	setNRFxxxMode(NRFxxx_MODE_BURST_RX);
 }
+#endif
 
 static int regDR_Event(void) {
 	return wiringPiISR (NRFxxx_DR_PIN, NRFxxx_DR_PIN_ISR_EDGE, &dataReadyHandler) ;
@@ -573,6 +604,7 @@ int nRFxxxSendFrame(void* pReadBuff, int nBuffLen) {
 //	printf("setNRFxxxMode to TX \n");
 	setNRFxxxMode(NRFxxx_MODE_BURST_TX);
 #else
+	nRFxxxSPI_WR_CMD(NRFxxx_CMD_FLUSH_TX_FIFO, NULL, 0);
 	nRFxxxSPI_WR_CMD(NRFxxx_CMD_WAP, pReadBuff, nBuffLen);
 #endif
 
