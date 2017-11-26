@@ -40,21 +40,23 @@ int32_t nRemoteCarStartReceive(void) {
 		nSetSystemValue(REMOTE_CAR_SYS_INFO_RF_STATUS, "RF init error");
 		return (-1);
 	}
-#ifdef NRF24L01P_AS_RF
-	// Prepare for next ACK
-	nRFxxxSendFrame(&tRemoteCarStatus, sizeof(tRemoteCarStatus));
-#endif
 	nRFxxxStartListen();
 	while (1) {
 		if (nRFxxxReadFrame(unRF_Frame, sizeof(unRF_Frame)) > 0) {
 //			printf("Remote car received: 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X.\n",
 //					unRF_Frame[0], unRF_Frame[1], unRF_Frame[2], unRF_Frame[3], unRF_Frame[4]);
+			// Do something when you received one message
 			if (nRemoteCarControl(unRF_Frame) != 0) {
 				REMOTE_CAR_LOG_ERR("Parse received data error.");
 				nIncrSystemValue(REMOTE_CAR_SYS_INFO_RF_FRAME_ERR);
 			} else {
-				nRFxxxSendFrame(&tRemoteCarStatus, sizeof(tRemoteCarStatus));
+
 			}
+			// manually after receive response, only needed by nRF905
+			// For nRF24L01+, the response is automatically by ACK feature
+#ifdef NRF905_AS_RF
+			nRFxxxSendFrame(&tRemoteCarStatus, sizeof(tRemoteCarStatus));
+#endif
 		} else {
 			printf("Remote car receive data from nRFxxx error.\n");
 			REMOTE_CAR_LOG_ERR("Remote car receive data from nRFxxx error.");

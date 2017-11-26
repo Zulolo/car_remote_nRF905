@@ -347,16 +347,10 @@ static void dataReadyHandler(void) {
 	piLock(NRFxxxSTATUS_LOCK);
 	if (NRFxxx_MODE_BURST_RX == tNRFxxxStatus.tNRFxxxCurrentMode) {
 		piUnlock(NRFxxxSTATUS_LOCK);
-#ifdef NRF905_AS_RF
 		setNRFxxxMode(NRFxxx_MODE_STD_BY);
-#endif
-#ifdef NRF24L01P_AS_RF
-		nRFxxxSPI_WR_CMD(NRFxxx_CMD_FLUSH_RX_FIFO, NULL, 0);
-		clearDRFlag();
-#endif
-		printf("DR set during RX.\n");
 		// make sure DR was set
 		nStatusReg = readStatusReg();
+		printf("DR set during RX with status 0x%02X.\n", nStatusReg);
 		if ((nStatusReg >= 0) && (NRFxxx_DR_IN_STATUS_REG(nStatusReg) == 0)) {
 			// Strange happens, do something?
 			NRFxxx_LOG_ERR("Strange happens. DR pin set but status register not.");
@@ -369,25 +363,34 @@ static void dataReadyHandler(void) {
 			piUnlock(NRFxxxSTATUS_LOCK);
 //			printf("Read RX payload.\n");
 			readRxPayload(unReadBuff, sizeof(unReadBuff));
-//			printf("New frame received: 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X.\n",
-//					unReadBuff[0], unReadBuff[1], unReadBuff[2], unReadBuff[3], unReadBuff[4]);
+#ifdef NRF24L01P_AS_RF
+			nRFxxxSPI_WR_CMD(NRFxxx_CMD_FLUSH_TX_FIFO, NULL, 0);
+#endif
+			printf("New frame received: 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X.\n",
+					unReadBuff[0], unReadBuff[1], unReadBuff[2], unReadBuff[3], unReadBuff[4]);
 //			printf("Write payload to pipe.\n");
-			if (write(nRFxxxPipeFd[1], unReadBuff, sizeof(unReadBuff)) != sizeof(unReadBuff)) {
-				NRFxxx_LOG_ERR("Write nRFxxx pipe error");
-			}
+
+//			if (write(nRFxxxPipeFd[1], unReadBuff, sizeof(unReadBuff)) != sizeof(unReadBuff)) {
+//				NRFxxx_LOG_ERR("Write nRFxxx pipe error");
+//			}
 		}
 		// Response shall be sent before continue receiving
-//		setNRFxxxMode(NRFxxx_MODE_BURST_RX);
+		// For nRF905 after receiving some message, manually response will be sent,
+		// After manually response message sent out, nRF905 will be put in RX mode
+		// For nRF24F01+, this is done by auto acknowledge
+#ifdef NRF24L01P_AS_RF
+		nRFxxxSPI_WR_CMD(NRFxxx_CMD_FLUSH_RX_FIFO, NULL, 0);
+		clearDRFlag();
+		setNRFxxxMode(NRFxxx_MODE_BURST_RX);
+#endif
 	} else if (NRFxxx_MODE_BURST_TX == tNRFxxxStatus.tNRFxxxCurrentMode) {
 		piUnlock(NRFxxxSTATUS_LOCK);
 		printf("DR set during TX, switch to receive mode.\n");
-#ifdef NRF905_AS_RF
-		setNRFxxxMode(NRFxxx_MODE_BURST_RX);
-#endif
 #ifdef NRF24L01P_AS_RF
 		nRFxxxSPI_WR_CMD(NRFxxx_CMD_FLUSH_RX_FIFO, NULL, 0);
 		clearDRFlag();
 #endif
+		setNRFxxxMode(NRFxxx_MODE_BURST_RX);
 	} else {
 		piUnlock(NRFxxxSTATUS_LOCK);
 		NRFxxx_LOG_ERR("Data ready pin was set but status is neither TX nor RX.");
@@ -395,6 +398,7 @@ static void dataReadyHandler(void) {
 		nRFxxxSPI_WR_CMD(NRFxxx_CMD_FLUSH_RX_FIFO, NULL, 0);
 		clearDRFlag();
 #endif
+		setNRFxxxMode(NRFxxx_MODE_BURST_RX);
 	}
 }
 
@@ -489,6 +493,7 @@ int nRFxxxInitial(int nSPI_Channel, int nSPI_Speed, unsigned char unPower) {
 	usleep(3000);
 
 #ifdef NRF24L01P_AS_RF
+	nRFxxxSPI_WR_CMD(NRFxxx_CMD_FLUSH_TX_FIFO, NULL, 0);
 	nRFxxxSPI_WR_CMD(NRFxxx_CMD_FLUSH_RX_FIFO, NULL, 0);
 #endif
 	printf("nRFxxxCRInitial.\n");
