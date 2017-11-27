@@ -290,13 +290,12 @@ static int setNRFxxxMode(nRFxxxMode_t tNRFxxxMode) {
 }
 
 static int setChannelMonitorTimer(int nSeconds) {
-	return 0;
-//	struct itimerval tChannelMonitorTimer;  /* for setting itimer */
-//	tChannelMonitorTimer.it_value.tv_sec = nSeconds;
-//	tChannelMonitorTimer.it_value.tv_usec = 0;
-//	tChannelMonitorTimer.it_interval.tv_sec = nSeconds;
-//	tChannelMonitorTimer.it_interval.tv_usec = 0;
-//	return setitimer(ITIMER_REAL, &tChannelMonitorTimer, NULL);
+	struct itimerval tChannelMonitorTimer;  /* for setting itimer */
+	tChannelMonitorTimer.it_value.tv_sec = nSeconds;
+	tChannelMonitorTimer.it_value.tv_usec = 0;
+	tChannelMonitorTimer.it_interval.tv_sec = nSeconds;
+	tChannelMonitorTimer.it_interval.tv_usec = 0;
+	return setitimer(ITIMER_REAL, &tChannelMonitorTimer, NULL);
 }
 
 #ifdef NRF905_AS_RF
@@ -442,8 +441,8 @@ static int nRFxxxCRInitial(int nRFxxxSPI_Fd) {
 	return writeConfig(0, NRFxxx_CR_DEFAULT, sizeof(NRFxxx_CR_DEFAULT));
 #else
 	int i;
-	writeTxAddr(0x12345678);
-	writeRxAddr(0x12345678);
+//	writeTxAddr(0x12345678);
+//	writeRxAddr(0x12345678);
 	for (i = 0; i < GET_LENGTH_OF_ARRAY(NRFxxx_CR_DEFAULT); i++) {
 		printf("Write CR initial %u value.\n", NRFxxx_CR_DEFAULT[i].unCRValues);
 		if (writeConfig(NRFxxx_CR_DEFAULT[i].unCRAddress,
@@ -456,15 +455,23 @@ static int nRFxxxCRInitial(int nRFxxxSPI_Fd) {
 #endif
 }
 
+#ifdef NRF905_AS_RF
+#define GET_CHN_PWR_FAST_CONFIG(x, y) 		((x) | ((y) << 10))
 static unsigned int getTxAddrFromChnPwr(unsigned int unNRFxxxCHN_PWR) {
 	return ((unNRFxxxCHN_PWR | (unNRFxxxCHN_PWR << 16)) & 0xA33D59AA);
 }
-
 static unsigned int getRxAddrFromChnPwr(unsigned short int unNRFxxxCHN_PWR) {
 	return ((unNRFxxxCHN_PWR | (unNRFxxxCHN_PWR << 16)) & 0x5CA259AA);
 }
+#else
+static unsigned int getRxAddrFromChnPwr(unsigned short int unNRFxxxCHN_PWR) {
+	return ((unNRFxxxCHN_PWR | (unNRFxxxCHN_PWR << 8) | (unNRFxxxCHN_PWR << 16) |
+			(unNRFxxxCHN_PWR << 24)) & 0x5CA259AA);
+}
+#endif
 
-#define GET_CHN_PWR_FAST_CONFIG(x, y) 		((x) | ((y) << 10))
+
+
 static void roamNRFxxx(void) {
 	static int nHoppingPoint = 0;
 	printf("Start hopping.\n");
@@ -478,7 +485,6 @@ static void roamNRFxxx(void) {
 	tNRFxxxStatus.unNRFxxxRxAddr = getRxAddrFromChnPwr(tNRFxxxStatus.unNRFxxxCHN_PWR);
 #else
 	tNRFxxxStatus.unNRFxxxCHN = unCAR_REMOTE_HOPPING_TAB[nHoppingPoint];
-	tNRFxxxStatus.unNRFxxxTxAddr = getTxAddrFromChnPwr(tNRFxxxStatus.unNRFxxxCHN);
 	tNRFxxxStatus.unNRFxxxRxAddr = getRxAddrFromChnPwr(tNRFxxxStatus.unNRFxxxCHN);
 #endif
 	(nHoppingPoint < (GET_LENGTH_OF_ARRAY(unCAR_REMOTE_HOPPING_TAB) - 1)) ? (nHoppingPoint++):(nHoppingPoint = 0);
@@ -487,10 +493,10 @@ static void roamNRFxxx(void) {
 	piUnlock(NRFxxxSTATUS_LOCK);
 #ifdef NRF905_AS_RF
 	writeFastConfig(tNRFxxxStatus.unNRFxxxCHN_PWR);
+	writeTxAddr(tNRFxxxStatus.unNRFxxxTxAddr);
 #else
 	writeConfig(NRFxxx_RF_CH_ADDR_IN_CR, &(tNRFxxxStatus.unNRFxxxCHN), sizeof(tNRFxxxStatus.unNRFxxxCHN));
 #endif
-	writeTxAddr(tNRFxxxStatus.unNRFxxxTxAddr);
 	writeRxAddr(tNRFxxxStatus.unNRFxxxRxAddr);
 #ifdef NRF905_AS_RF
 	setNRFxxxMode(NRFxxx_MODE_BURST_RX);
@@ -568,15 +574,15 @@ int nRFxxxStartListen(void) {
 	// register ISR to handle data receive when DR rise edge
 	regDR_Event();
 
-//	printf("Start registering SIGALM.\n");
-//	// start timer to watch communication, if do RX during 1s, start hopping
-//	if (signal(SIGALRM, (void (*)(int)) roamNRFxxx) == SIG_ERR) {
-//		NRFxxx_LOG_ERR("Unable to catch SIGALRM");
-//		close(nRFxxxPipeFd[0]);
-//		close(nRFxxxPipeFd[1]);
-//		return (-1);
-//	}
-//	raise(SIGALRM);
+	printf("Start registering SIGALM.\n");
+	// start timer to watch communication, if do RX during 1s, start hopping
+	if (signal(SIGALRM, (void (*)(int)) roamNRFxxx) == SIG_ERR) {
+		NRFxxx_LOG_ERR("Unable to catch SIGALRM");
+		close(nRFxxxPipeFd[0]);
+		close(nRFxxxPipeFd[1]);
+		return (-1);
+	}
+	raise(SIGALRM);
 
 	if (setChannelMonitorTimer(1) != 0) {
 		NRFxxx_LOG_ERR("error calling setitimer()");
