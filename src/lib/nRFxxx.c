@@ -529,7 +529,7 @@ int nRFxxxInitial(int nSPI_Channel, int nSPI_Speed, unsigned char unPower) {
 #endif
 	printf("nRFxxxCRInitial.\n");
 	nRFxxxCRInitial(nRFxxxSPI_Fd);
-	printf("readConfig.\n");
+//	printf("readConfig.\n");
 #ifdef NRF905_AS_RF
 	readConfig(0, unCRValue, sizeof(unCRValue));
 #else
