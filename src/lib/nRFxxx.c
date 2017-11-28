@@ -474,7 +474,7 @@ static unsigned int getRxAddrFromChnPwr(unsigned short int unNRFxxxCHN_PWR) {
 
 static void roamNRFxxx(void) {
 	static int nHoppingPoint = 0;
-	printf("Start hopping.\n");
+
 #ifdef NRF905_AS_RF
 	setNRFxxxMode(NRFxxx_MODE_STD_BY);
 #endif
@@ -487,6 +487,7 @@ static void roamNRFxxx(void) {
 	tNRFxxxStatus.unNRFxxxCHN = unCAR_REMOTE_HOPPING_TAB[nHoppingPoint];
 	tNRFxxxStatus.unNRFxxxRxAddr = getRxAddrFromChnPwr(tNRFxxxStatus.unNRFxxxCHN);
 #endif
+	printf("Start hopping with CHN: 0x%02X, RX addr: 0x%08X.\n", tNRFxxxStatus.unNRFxxxCHN, tNRFxxxStatus.unNRFxxxRxAddr);
 	(nHoppingPoint < (GET_LENGTH_OF_ARRAY(unCAR_REMOTE_HOPPING_TAB) - 1)) ? (nHoppingPoint++):(nHoppingPoint = 0);
 	tNRFxxxStatus.unNRFxxxHoppingCNT++;
 
