@@ -611,8 +611,9 @@ int nRFxxxSendFrame(void* pReadBuff, int nBuffLen) {
 //	printf("setNRFxxxMode to TX \n");
 	setNRFxxxMode(NRFxxx_MODE_BURST_TX);
 #else
-	nRFxxxSPI_WR_CMD(NRFxxx_CMD_FLUSH_TX_FIFO, NULL, 0);
+//	nRFxxxSPI_WR_CMD(NRFxxx_CMD_FLUSH_TX_FIFO, NULL, 0);
 	nRFxxxSPI_WR_CMD(NRFxxx_CMD_WAP, pReadBuff, nBuffLen);
+	setNRFxxxMode(NRFxxx_MODE_BURST_RX);
 #endif
 
 	// TODO: Better to add timeout here in case DR will not be set.
