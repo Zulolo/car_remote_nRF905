@@ -55,7 +55,7 @@ int32_t nRemoteCarStartReceive(void) {
 			// manually after receive response, only needed by nRF905
 			// For nRF24L01+, the response is automatically by ACK feature
 			// But for test, I add it here
-//			nRFxxxSendFrame(&tRemoteCarStatus, sizeof(tRemoteCarStatus));
+			nRFxxxSendFrame(&tRemoteCarStatus, sizeof(tRemoteCarStatus));
 		} else {
 			printf("Remote car receive data from nRFxxx error.\n");
 			REMOTE_CAR_LOG_ERR("Remote car receive data from nRFxxx error.");

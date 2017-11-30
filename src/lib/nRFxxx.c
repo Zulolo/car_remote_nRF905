@@ -51,6 +51,7 @@
 #define NRFxxx_CMD_CC(unPwrChn)					((unPwrChn) | 0x8000)
 #define CH_MSK_IN_CC_REG						0x01FF
 #define NRFxxx_DR_IN_STATUS_REG(status)			((status) & (0x01 << 5))
+#define NRFxxx_CMD_READ_STATUS					NRFxxx_CMD_RC(1)
 #else
 #define NRFxxx_DR_PIN_ISR_EDGE					INT_EDGE_FALLING
 #define NRFxxx_TRX_CE_PIN						2
@@ -70,6 +71,7 @@
 #define NRFxxx_CMD_FLUSH_RX_FIFO				0xE2	// flush RX FIFO
 #define NRFxxx_CMD_FLUSH_TX_FIFO				0xE1	// flush TX FIFO
 #define NRFxxx_DR_IN_STATUS_REG(status)			((status) & (0x01 << 6))
+#define NRFxxx_CMD_READ_STATUS					0xFF
 #endif
 
 #define NRFxxxSTATUS_LOCK						111
@@ -124,7 +126,7 @@ typedef struct _nRFxxxInitCR {
 //static const nRFxxxInitCR_t NRFxxx_CR_DEFAULT[] = {{1, 0x01},
 //		{2, 0x01}, {5, 40}, {17, 32}, {6, 0x0F}, {0, 0x3F}};
 static const nRFxxxInitCR_t NRFxxx_CR_DEFAULT[] = {{0, 0x3F}, {1, 0x01},
-		{2, 0x01}, {3, 0x02}, {4, 0x14}, {5, 40}, {6, 0x0F}, {7, 0x70},
+		{2, 0x01}, {3, 0x02}, {4, 0x24}, {5, 40}, {6, 0x08}, {7, 0x70},
 		{28, 0x01}, {29, 0x06}};
 #endif
 
@@ -190,7 +192,7 @@ static int readStatusReg(void) {
 	int nResult;
 	nRFxxxMode_t tPreMode;
 	unsigned char unStatus;
-	unStatus = NRFxxx_CMD_RC(1);
+	unStatus = NRFxxx_CMD_READ_STATUS;
 	tPreMode = tNRFxxxStatus.tNRFxxxCurrentMode;
 	setNRFxxxMode(NRFxxx_MODE_STD_BY);
 	nResult = wiringPiSPIDataRW(nRFxxxSPI_CHN, &unStatus, 1);
@@ -373,7 +375,7 @@ static int readRxPayloadWidth(void) {
 }
 
 static int clearDRFlag(void) {
-	static const unsigned char unClearDRFlag = 0x70;
+	static const unsigned char unClearDRFlag = 0x50;
 	return writeConfig(NRFxxx_STATUS_ADDR_IN_CR, &unClearDRFlag, 1);
 }
 
@@ -485,6 +487,7 @@ static void roamNRFxxx(void) {
 	tNRFxxxStatus.unNRFxxxRxAddr = getRxAddrFromChnPwr(tNRFxxxStatus.unNRFxxxCHN_PWR);
 #else
 	tNRFxxxStatus.unNRFxxxCHN = unCAR_REMOTE_HOPPING_TAB[nHoppingPoint];
+	tNRFxxxStatus.unNRFxxxTxAddr = getRxAddrFromChnPwr(tNRFxxxStatus.unNRFxxxCHN);
 	tNRFxxxStatus.unNRFxxxRxAddr = getRxAddrFromChnPwr(tNRFxxxStatus.unNRFxxxCHN);
 #endif
 	printf("Start hopping with CHN: 0x%02X, RX addr: 0x%08X.\n", tNRFxxxStatus.unNRFxxxCHN, tNRFxxxStatus.unNRFxxxRxAddr);
@@ -497,6 +500,7 @@ static void roamNRFxxx(void) {
 	writeTxAddr(tNRFxxxStatus.unNRFxxxTxAddr);
 #else
 	writeConfig(NRFxxx_RF_CH_ADDR_IN_CR, &(tNRFxxxStatus.unNRFxxxCHN), sizeof(tNRFxxxStatus.unNRFxxxCHN));
+	writeTxAddr(tNRFxxxStatus.unNRFxxxTxAddr);
 #endif
 	writeRxAddr(tNRFxxxStatus.unNRFxxxRxAddr);
 #ifdef NRF905_AS_RF
